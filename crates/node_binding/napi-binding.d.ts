@@ -581,6 +581,7 @@ export declare enum BuiltinPluginName {
   EvalSourceMapDevToolPlugin = 'EvalSourceMapDevToolPlugin',
   EvalDevToolModulePlugin = 'EvalDevToolModulePlugin',
   SideEffectsFlagPlugin = 'SideEffectsFlagPlugin',
+  InnerGraphPlugin = 'InnerGraphPlugin',
   FlagDependencyExportsPlugin = 'FlagDependencyExportsPlugin',
   FlagDependencyUsagePlugin = 'FlagDependencyUsagePlugin',
   InlineExportsPlugin = 'InlineExportsPlugin',
@@ -2234,6 +2235,7 @@ export interface RawExperiments {
   useInputFileSystem?: false | Array<RegExp>
   css?: boolean
   deferImport: boolean
+  advancedTreeShaking: boolean
 }
 
 export interface RawExposeOptions {
@@ -2464,6 +2466,7 @@ typeReexportsPresence?: string
  */
 jsx?: boolean
 deferImport?: boolean
+sideEffectsFree?: Array<string>
 }
 
 export interface RawJsonGeneratorOptions {

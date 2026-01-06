@@ -1657,6 +1657,7 @@ CompilerOptions {
                                 false,
                             ),
                             defer_import: None,
+                            side_effects_free: None,
                         },
                     ),
                 },
@@ -1684,6 +1685,7 @@ CompilerOptions {
     experiments: Experiments {
         css: false,
         defer_import: false,
+        advanced_tree_shaking: false,
     },
     incremental: IncrementalOptions {
         silent: true,

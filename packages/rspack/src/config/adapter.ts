@@ -599,6 +599,7 @@ function getRawJavascriptParserOptions(
     typeReexportsPresence: parser.typeReexportsPresence,
     jsx: parser.jsx,
     deferImport: parser.deferImport,
+    sideEffectsFree: parser.sideEffectsFree,
   };
 }
 

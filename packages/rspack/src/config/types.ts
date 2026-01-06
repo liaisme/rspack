@@ -1218,6 +1218,9 @@ export type JavascriptParserOptions = {
    * @default false
    */
   deferImport?: boolean;
+
+  /** Flag the function to have no side effects */
+  sideEffectsFree?: string[];
 };
 
 export type JsonParserOptions = {
