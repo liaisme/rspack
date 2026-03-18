@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use either::Either;
 use rspack_core::{
@@ -11,7 +11,10 @@ use swc_core::{
   ecma::ast::{ArrowExpr, BlockStmtOrExpr, CallExpr, Expr, FnExpr, UnaryExpr},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserEvaluateTypeof, JavascriptParserPlugin,
+  JavascriptParserPluginContext, JavascriptParserTypeof,
+};
 use crate::{
   dependency::{RequireEnsureDependency, RequireEnsureItemDependency},
   utils::eval::{self, BasicEvaluatedExpression},
@@ -20,8 +23,7 @@ use crate::{
 
 pub struct RequireEnsureDependenciesBlockParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for RequireEnsureDependenciesBlockParserPlugin {
+impl RequireEnsureDependenciesBlockParserPlugin {
   fn evaluate_typeof<'a>(
     &self,
     _parser: &mut JavascriptParser,
@@ -166,6 +168,47 @@ impl JavascriptParserPlugin for RequireEnsureDependenciesBlockParserPlugin {
     }
 
     Some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  RequireEnsureDependenciesBlockParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  RequireEnsureDependenciesBlockParserPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  RequireEnsureDependenciesBlockParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, expr: &CallExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for RequireEnsureDependenciesBlockParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .evaluate_typeof
+      .r#for("require.ensure")
+      .tap(self.clone());
+    context
+      .hooks
+      .r#typeof
+      .r#for("require.ensure")
+      .tap(self.clone());
+    context.hooks.call.r#for("require.ensure").tap(self);
   }
 }
 

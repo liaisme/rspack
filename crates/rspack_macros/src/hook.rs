@@ -24,6 +24,9 @@ impl Parse for DefineHookInput {
     syn::parenthesized!(content in input);
     let args = content.parse_terminated(PatType::parse, Token![,])?;
     let exec_kind = match kind.as_str() {
+      "SyncBail" => ExecKind::SyncBail {
+        ret: ExecKind::parse_ret(input)?,
+      },
       "SeriesBail" => ExecKind::SeriesBail {
         ret: ExecKind::parse_ret(input)?,
       },
@@ -187,6 +190,7 @@ impl DefineHookInput {
 enum ExecKind {
   Series,
   Sync,
+  SyncBail { ret: Option<TypePath> },
   SeriesBail { ret: Option<TypePath> },
   SeriesWaterfall { ret: TypePath },
   Parallel,
@@ -194,7 +198,7 @@ enum ExecKind {
 
 impl ExecKind {
   fn is_async(&self) -> bool {
-    !matches!(self, Self::Sync)
+    !matches!(self, Self::Sync | Self::SyncBail { .. })
   }
 
   pub fn parse_ret(input: ParseStream) -> Result<Option<TypePath>> {
@@ -209,7 +213,7 @@ impl ExecKind {
 
   pub fn return_type(&self) -> TokenStream {
     match self {
-      Self::SeriesBail { ret } => {
+      Self::SyncBail { ret } | Self::SeriesBail { ret } => {
         if let Some(ret) = ret {
           quote! { ::rspack_hook::__macro_helper::Result<std::option::Option<#ret>> }
         } else {
@@ -260,6 +264,17 @@ impl ExecKind {
             tap.run(#args)?;
           }
           Ok(())
+        }
+      }
+      Self::SyncBail { .. } => {
+        quote! {
+          #additional_taps
+          for tap in all_taps {
+            if let Some(res) = tap.run(#args)? {
+              return Ok(Some(res));
+            }
+          }
+          Ok(None)
         }
       }
       Self::SeriesBail { .. } => {

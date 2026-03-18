@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use rspack_core::DependencyType;
 use rspack_plugin_javascript::{
-  JavascriptParserPlugin, dependency::ESMCompatibilityDependency, visitors::JavascriptParser,
+  JavascriptParserFinish, JavascriptParserPlugin, JavascriptParserPluginContext,
+  dependency::ESMCompatibilityDependency, visitors::JavascriptParser,
 };
 pub struct EsmLibParserPlugin;
 
-#[rspack_plugin_javascript::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for EsmLibParserPlugin {
+impl EsmLibParserPlugin {
   fn finish(&self, parser: &mut JavascriptParser) -> Option<bool> {
     if parser.module_type.is_js_auto()
       && matches!(
@@ -31,5 +33,19 @@ impl JavascriptParserPlugin for EsmLibParserPlugin {
     }
 
     None
+  }
+}
+
+struct EsmLibParserPluginFinishTap(Arc<EsmLibParserPlugin>);
+
+impl JavascriptParserFinish for EsmLibParserPluginFinishTap {
+  fn run(&self, parser: &mut JavascriptParser) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.finish(parser))
+  }
+}
+
+impl JavascriptParserPlugin for EsmLibParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.finish.tap(EsmLibParserPluginFinishTap(self));
   }
 }

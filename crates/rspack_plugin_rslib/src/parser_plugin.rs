@@ -1,4 +1,9 @@
-use rspack_plugin_javascript::{JavascriptParserPlugin, visitors::JavascriptParser};
+use std::sync::Arc;
+
+use rspack_plugin_javascript::{
+  JavascriptParserMember, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserTypeof, visitors::JavascriptParser,
+};
 use swc_core::ecma::ast::MemberExpr;
 
 #[derive(PartialEq, Debug, Default)]
@@ -14,8 +19,7 @@ impl RslibParserPlugin {
   }
 }
 
-#[rspack_plugin_javascript::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for RslibParserPlugin {
+impl RslibParserPlugin {
   fn member(
     &self,
     _parser: &mut JavascriptParser,
@@ -45,5 +49,47 @@ impl JavascriptParserPlugin for RslibParserPlugin {
     } else {
       None
     }
+  }
+}
+
+#[derive(Clone)]
+struct RslibParserPluginTap(Arc<RslibParserPlugin>);
+
+impl JavascriptParserMember for RslibParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    member_expr: &MemberExpr,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.member(parser, member_expr, for_name))
+  }
+}
+
+impl JavascriptParserTypeof for RslibParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.r#typeof(parser, expr, for_name))
+  }
+}
+
+impl JavascriptParserPlugin for RslibParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    let tap = RslibParserPluginTap(self);
+    for key in [
+      "require.cache",
+      "require.extensions",
+      "require.config",
+      "require.version",
+      "require.include",
+      "require.onError",
+    ] {
+      context.hooks.member.r#for(key).tap(tap.clone());
+    }
+    context.hooks.r#typeof.r#for("module").tap(tap);
   }
 }

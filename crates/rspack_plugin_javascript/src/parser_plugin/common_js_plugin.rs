@@ -1,7 +1,12 @@
+use std::sync::Arc;
+
 use rspack_core::{ConstDependency, RuntimeGlobals, RuntimeRequirementsDependency};
 use swc_core::ecma::ast::MemberExpr;
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserEvaluateIdentifier, JavascriptParserMember, JavascriptParserPlugin,
+  JavascriptParserPluginContext, JavascriptParserTypeof,
+};
 use crate::{
   utils::eval::{BasicEvaluatedExpression, evaluate_to_identifier},
   visitors::{JavascriptParser, expr_name},
@@ -9,8 +14,7 @@ use crate::{
 
 pub struct CommonJsPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for CommonJsPlugin {
+impl CommonJsPlugin {
   fn evaluate_identifier(
     &self,
     _parser: &mut JavascriptParser,
@@ -71,5 +75,47 @@ impl JavascriptParserPlugin for CommonJsPlugin {
     }
 
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  CommonJsPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsPlugin,
+  JavascriptParserMember,
+  member(parser: &mut JavascriptParser, expr: &MemberExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for CommonJsPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(expr_name::MODULE_HOT)
+      .tap(self.clone());
+    context
+      .hooks
+      .r#typeof
+      .r#for(expr_name::MODULE)
+      .tap(self.clone());
+    context.hooks.member.r#for("module.id").tap(self.clone());
+    context.hooks.member.r#for("module.loaded").tap(self);
   }
 }

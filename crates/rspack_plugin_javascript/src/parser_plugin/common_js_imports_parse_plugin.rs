@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{
   ConstDependency, ContextDependency, ContextMode, ContextNameSpaceObject, ContextOptions,
   DependencyCategory, DependencyRange, DependencyType, ReferencedSpecifier,
@@ -13,7 +15,16 @@ use swc_core::{
   },
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserAssign, JavascriptParserCall, JavascriptParserCallMemberChain,
+  JavascriptParserCallMemberChainOfCallMemberChain,
+  JavascriptParserCanCollectDestructuringAssignmentProperties, JavascriptParserCanRename,
+  JavascriptParserEvaluateIdentifier, JavascriptParserEvaluateTypeof, JavascriptParserFinish,
+  JavascriptParserIdentifier, JavascriptParserMemberChain,
+  JavascriptParserMemberChainOfCallMemberChain, JavascriptParserNewExpression,
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserPreDeclarator,
+  JavascriptParserRename, JavascriptParserTypeof,
+};
 use crate::{
   dependency::{
     CommonJsFullRequireDependency, CommonJsRequireContextDependency, CommonJsRequireDependency,
@@ -602,8 +613,7 @@ impl CommonJsImportsParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for CommonJsImportsParserPlugin {
+impl CommonJsImportsParserPlugin {
   fn can_collect_destructuring_assignment_properties(
     &self,
     _parser: &mut JavascriptParser,
@@ -972,5 +982,218 @@ impl JavascriptParserPlugin for CommonJsImportsParserPlugin {
       }
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties,
+  can_collect_destructuring_assignment_properties(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    declarator: &VarDeclarator,
+    declaration: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserMemberChain,
+  member_chain(
+    parser: &mut JavascriptParser,
+    expr: &MemberExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserCallMemberChain,
+  call_member_chain(
+    parser: &mut JavascriptParser,
+    expr: &CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserCanRename,
+  can_rename(parser: &mut JavascriptParser, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserRename,
+  rename(parser: &mut JavascriptParser, expr: &Expr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserNewExpression,
+  new_expression(
+    parser: &mut JavascriptParser,
+    new_expr: &NewExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserMemberChainOfCallMemberChain,
+  member_chain_of_call_member_chain(
+    parser: &mut JavascriptParser,
+    member_expr: &MemberExpr,
+    callee_members: &[Atom],
+    call_expr: &CallExpr,
+    members: &[Atom],
+    member_ranges: &[Span],
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserCallMemberChainOfCallMemberChain,
+  call_member_chain_of_call_member_chain(
+    parser: &mut JavascriptParser,
+    call_expr: &CallExpr,
+    callee_members: &[Atom],
+    inner_call_expr: &CallExpr,
+    members: &[Atom],
+    member_ranges: &[Span],
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserAssign,
+  assign(parser: &mut JavascriptParser, expr: &AssignExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsImportsParserPlugin,
+  JavascriptParserFinish,
+  finish(parser: &mut JavascriptParser) -> bool
+);
+
+impl JavascriptParserPlugin for CommonJsImportsParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .can_collect_destructuring_assignment_properties
+      .tap(self.clone());
+    context.hooks.pre_declarator.tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(COMMONJS_REQUIRE_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(expr_name::REQUIRE)
+      .tap(self.clone());
+    context
+      .hooks
+      .member_chain
+      .r#for(COMMONJS_REQUIRE_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .call_member_chain
+      .r#for(COMMONJS_REQUIRE_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .can_rename
+      .r#for(expr_name::REQUIRE)
+      .tap(self.clone());
+    context
+      .hooks
+      .rename
+      .r#for(expr_name::REQUIRE)
+      .tap(self.clone());
+    for key in [
+      expr_name::REQUIRE,
+      expr_name::REQUIRE_RESOLVE,
+      expr_name::REQUIRE_RESOLVE_WEAK,
+    ] {
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+      context
+        .hooks
+        .evaluate_identifier
+        .r#for(key)
+        .tap(self.clone());
+      context.hooks.r#typeof.r#for(key).tap(self.clone());
+    }
+    for key in [
+      expr_name::REQUIRE,
+      expr_name::MODULE_REQUIRE,
+      expr_name::REQUIRE_RESOLVE,
+      expr_name::REQUIRE_RESOLVE_WEAK,
+    ] {
+      context.hooks.call.r#for(key).tap(self.clone());
+    }
+    for key in [expr_name::REQUIRE, expr_name::MODULE_REQUIRE] {
+      context.hooks.new_expression.r#for(key).tap(self.clone());
+      context
+        .hooks
+        .member_chain_of_call_member_chain
+        .r#for(key)
+        .tap(self.clone());
+      context
+        .hooks
+        .call_member_chain_of_call_member_chain
+        .r#for(key)
+        .tap(self.clone());
+    }
+    context
+      .hooks
+      .assign
+      .r#for(expr_name::REQUIRE)
+      .tap(self.clone());
+    context.hooks.finish.tap(self);
   }
 }

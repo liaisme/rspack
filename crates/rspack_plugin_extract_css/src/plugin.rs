@@ -726,7 +726,7 @@ async fn nmf_parser(
     && let Some(parser) = parser.downcast_mut::<JavaScriptParserAndGenerator>()
   {
     parser.add_parser_plugin(
-      Box::<PluginCssExtractParserPlugin>::default() as BoxJavascriptParserPlugin
+      Arc::new(PluginCssExtractParserPlugin::default()) as BoxJavascriptParserPlugin
     );
   }
   Ok(())

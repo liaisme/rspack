@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{BoxDependency, DependencyRange};
 use rspack_util::SpanExt;
 use swc_core::{
@@ -11,7 +13,10 @@ use crate::{
     ModuleArgumentDependency, ModuleHotAcceptDependency, ModuleHotDeclineDependency,
     import_emitted_runtime,
   },
-  parser_plugin::JavascriptParserPlugin,
+  parser_plugin::{
+    JavascriptParserCall, JavascriptParserEvaluateIdentifier, JavascriptParserMember,
+    JavascriptParserPlugin, JavascriptParserPluginContext,
+  },
   utils::eval,
   visitors::{JavascriptParser, expr_name},
 };
@@ -132,8 +137,7 @@ impl ModuleHotReplacementParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ModuleHotReplacementParserPlugin {
+impl ModuleHotReplacementParserPlugin {
   fn evaluate_identifier(
     &self,
     _parser: &mut JavascriptParser,
@@ -200,7 +204,7 @@ impl ImportMetaHotReplacementParserPlugin {
   }
 }
 
-impl JavascriptParserPlugin for ImportMetaHotReplacementParserPlugin {
+impl ImportMetaHotReplacementParserPlugin {
   fn evaluate_identifier(
     &self,
     _parser: &mut JavascriptParser,
@@ -252,5 +256,112 @@ impl JavascriptParserPlugin for ImportMetaHotReplacementParserPlugin {
     } else {
       None
     }
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ModuleHotReplacementParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> crate::utils::eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  ModuleHotReplacementParserPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ModuleHotReplacementParserPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    call_expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaHotReplacementParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> crate::utils::eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaHotReplacementParserPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaHotReplacementParserPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    call_expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ModuleHotReplacementParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(expr_name::MODULE_HOT)
+      .tap(self.clone());
+    context
+      .hooks
+      .member
+      .r#for(expr_name::MODULE_HOT)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(expr_name::MODULE_HOT_ACCEPT)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(expr_name::MODULE_HOT_DECLINE)
+      .tap(self);
+  }
+}
+
+impl JavascriptParserPlugin for ImportMetaHotReplacementParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(expr_name::IMPORT_META_HOT)
+      .tap(self.clone());
+    context
+      .hooks
+      .member
+      .r#for(expr_name::IMPORT_META_HOT)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(expr_name::IMPORT_META_HOT_ACCEPT)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(expr_name::IMPORT_META_HOT_DECLINE)
+      .tap(self);
   }
 }

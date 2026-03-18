@@ -5,10 +5,7 @@ use swc_core::{
 };
 
 use super::BasicEvaluatedExpression;
-use crate::{
-  parser_plugin::JavascriptParserPlugin,
-  visitors::{CallHooksName, JavascriptParser, RootName},
-};
+use crate::visitors::{CallHooksName, JavascriptParser, RootName};
 
 #[inline]
 fn eval_typeof<'a>(

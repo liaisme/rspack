@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use swc_core::{
   common::Spanned,
   ecma::ast::{Ident, ObjectPatProp, Pat},
 };
 
-use super::JavascriptParserPlugin;
+use super::{JavascriptParserDeclarator, JavascriptParserPlugin, JavascriptParserPluginContext};
 use crate::visitors::{
   JavascriptParser, VariableDeclaration, VariableDeclarationKind, create_traceable_error,
 };
@@ -89,8 +91,7 @@ impl CheckVarDeclaratorIdent {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for CheckVarDeclaratorIdent {
+impl CheckVarDeclaratorIdent {
   fn declarator(
     &self,
     parser: &mut JavascriptParser,
@@ -107,5 +108,21 @@ impl JavascriptParserPlugin for CheckVarDeclaratorIdent {
       }
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  CheckVarDeclaratorIdent,
+  JavascriptParserDeclarator,
+  declarator(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::VarDeclarator,
+    stmt: VariableDeclaration<'_>
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for CheckVarDeclaratorIdent {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.declarator.tap(self);
   }
 }

@@ -34,10 +34,6 @@ pub mod hot_module_replacement_plugin;
 pub mod provide_plugin;
 pub mod side_effects_parser_plugin;
 
-pub use self::r#trait::{
-  BoxJavascriptParserPlugin, JavascriptParserPlugin, JavascriptParserPluginHook,
-  JavascriptParserPluginHooks,
-};
 pub(crate) use self::{
   amd::{
     AMDDefineDependencyParserPlugin, AMDParserPlugin, AMDRequireDependenciesBlockParserPlugin,
@@ -49,7 +45,6 @@ pub(crate) use self::{
   common_js_plugin::CommonJsPlugin,
   compatibility_plugin::CompatibilityPlugin,
   r#const::{ConstPlugin, is_logic_op},
-  drive::JavaScriptParserPluginDrive,
   esm_detection_parser_plugin::ESMDetectionParserPlugin,
   esm_export_dependency_parser_plugin::ESMExportDependencyParserPlugin,
   esm_import_dependency_parser_plugin::ESMImportDependencyParserPlugin,
@@ -71,6 +66,10 @@ pub(crate) use self::{
   url_plugin::URLPlugin,
   use_strict_plugin::UseStrictPlugin,
   worker_plugin::WorkerPlugin,
+};
+pub use self::{
+  drive::*,
+  r#trait::{BoxJavascriptParserPlugin, JavascriptParserPlugin, JavascriptParserPluginContext},
 };
 
 pub static JS_DEFAULT_KEYWORD: std::sync::LazyLock<swc_core::atoms::Atom> =

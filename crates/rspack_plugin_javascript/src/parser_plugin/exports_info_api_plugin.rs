@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
 use rspack_util::SpanExt;
 use swc_core::{
@@ -6,15 +8,17 @@ use swc_core::{
   ecma::ast::{Ident, MemberExpr},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserIdentifier, JavascriptParserMemberChain, JavascriptParserPlugin,
+  JavascriptParserPluginContext,
+};
 use crate::{dependency::ExportInfoDependency, visitors::JavascriptParser};
 
 const EXPORTS_INFO: &str = "__webpack_exports_info__";
 
 pub struct ExportsInfoApiPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ExportsInfoApiPlugin {
+impl ExportsInfoApiPlugin {
   fn member_chain(
     &self,
     parser: &mut JavascriptParser,
@@ -53,5 +57,38 @@ impl JavascriptParserPlugin for ExportsInfoApiPlugin {
     } else {
       None
     }
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ExportsInfoApiPlugin,
+  JavascriptParserMemberChain,
+  member_chain(
+    parser: &mut JavascriptParser,
+    member_expr: &MemberExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ExportsInfoApiPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut crate::visitors::JavascriptParser,
+    expr: &Ident,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ExportsInfoApiPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .member_chain
+      .r#for(EXPORTS_INFO)
+      .tap(self.clone());
+    context.hooks.identifier.r#for(EXPORTS_INFO).tap(self);
   }
 }

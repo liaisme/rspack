@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 mod if_stmt;
 mod logic_expr;
 
@@ -6,7 +8,11 @@ use rspack_util::SpanExt;
 use swc_core::common::Spanned;
 
 pub use self::logic_expr::is_logic_op;
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserEvaluateIdentifier, JavascriptParserExpressionConditionalOperation,
+  JavascriptParserExpressionLogicalOperator, JavascriptParserIdentifier, JavascriptParserPlugin,
+  JavascriptParserPluginContext, JavascriptParserStatementIf, JavascriptParserUnusedStatement,
+};
 use crate::{
   utils::eval::evaluate_to_string,
   visitors::{JavascriptParser, Statement},
@@ -17,8 +23,7 @@ pub struct ConstPlugin;
 const RESOURCE_FRAGMENT: &str = "__resourceFragment";
 const RESOURCE_QUERY: &str = "__resourceQuery";
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ConstPlugin {
+impl ConstPlugin {
   fn expression_logical_operator(
     &self,
     parser: &mut JavascriptParser,
@@ -155,5 +160,71 @@ impl JavascriptParserPlugin for ConstPlugin {
     )));
 
     Some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserExpressionLogicalOperator,
+  expression_logical_operator(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::BinExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserExpressionConditionalOperation,
+  expression_conditional_operation(
+    parser: &mut JavascriptParser,
+    expression: &swc_core::ecma::ast::CondExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserStatementIf,
+  statement_if(parser: &mut JavascriptParser, expr: &swc_core::ecma::ast::IfStmt) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> crate::utils::eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  ConstPlugin,
+  JavascriptParserUnusedStatement,
+  unused_statement(parser: &mut JavascriptParser, stmt: Statement) -> bool
+);
+
+impl JavascriptParserPlugin for ConstPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.expression_logical_operator.tap(self.clone());
+    context
+      .hooks
+      .expression_conditional_operation
+      .tap(self.clone());
+    context.hooks.statement_if.tap(self.clone());
+    for key in [RESOURCE_FRAGMENT, RESOURCE_QUERY] {
+      context.hooks.identifier.r#for(key).tap(self.clone());
+      context
+        .hooks
+        .evaluate_identifier
+        .r#for(key)
+        .tap(self.clone());
+    }
+    context.hooks.unused_statement.tap(self);
   }
 }

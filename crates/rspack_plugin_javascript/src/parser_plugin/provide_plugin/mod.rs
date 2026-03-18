@@ -43,7 +43,7 @@ impl ProvidePlugin {
       .flat_map(|name| {
         let splitted: Vec<&str> = name.split('.').collect();
         // splitted.len() is always greater than 0
-        (0..splitted.len() - 1)
+        (0..splitted.len())
           .map(|i| splitted[0..i + 1].join("."))
           .collect::<Vec<_>>()
       })
@@ -85,7 +85,7 @@ async fn nmf_parser(
   if module_type.is_js_like()
     && let Some(parser) = parser.downcast_mut::<JavaScriptParserAndGenerator>()
   {
-    parser.add_parser_plugin(Box::new(ProvideParserPlugin::new(
+    parser.add_parser_plugin(Arc::new(ProvideParserPlugin::new(
       self.provide.clone(),
       self.names.clone(),
     )));

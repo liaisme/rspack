@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{BoxDependencyTemplate, ConstDependency, ContextDependency, DependencyRange};
 use rspack_util::{SpanExt, itoa};
 use swc_core::{
@@ -6,7 +8,11 @@ use swc_core::{
   ecma::ast::{CallExpr, VarDeclarator},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserIdentifier, JavascriptParserPattern,
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserPreDeclarator,
+  JavascriptParserPreStatement, JavascriptParserProgram,
+};
 use crate::{
   dependency::CommonJsRequireContextDependency,
   visitors::{JavascriptParser, Statement, TagInfoData, VariableDeclaration, expr_name},
@@ -74,8 +80,7 @@ impl CompatibilityPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for CompatibilityPlugin {
+impl CompatibilityPlugin {
   fn program(
     &self,
     parser: &mut JavascriptParser,
@@ -248,5 +253,76 @@ impl JavascriptParserPlugin for CompatibilityPlugin {
       return self.browserify_require_handler(parser, expr);
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserProgram,
+  program(parser: &mut JavascriptParser, ast: &swc_core::ecma::ast::Program) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    decl: &VarDeclarator,
+    statement: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserPattern,
+  pattern(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserPreStatement,
+  pre_statement(parser: &mut JavascriptParser, stmt: Statement) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CompatibilityPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for CompatibilityPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.program.tap(self.clone());
+    context.hooks.pre_declarator.tap(self.clone());
+    context.hooks.pre_statement.tap(self.clone());
+    context
+      .hooks
+      .pattern
+      .r#for(context.parser_runtime_requirements.exports.as_str())
+      .tap(self.clone());
+    context
+      .hooks
+      .pattern
+      .r#for(context.parser_runtime_requirements.require.as_str())
+      .tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(NESTED_IDENTIFIER_TAG)
+      .tap(self.clone());
+    context.hooks.call.r#for(expr_name::REQUIRE).tap(self);
   }
 }

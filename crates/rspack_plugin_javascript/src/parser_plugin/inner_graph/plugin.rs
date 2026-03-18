@@ -1,4 +1,7 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{
+  Arc,
+  atomic::{AtomicU32, Ordering},
+};
 
 use rspack_core::UsedByExports;
 use rspack_util::SpanExt;
@@ -15,7 +18,15 @@ use super::state::InnerGraphUsageOperation;
 use crate::{
   ClassExt,
   dependency::PureExpressionDependency,
-  parser_plugin::{DEFAULT_STAR_JS_WORD, JavascriptParserPlugin},
+  parser_plugin::{
+    DEFAULT_STAR_JS_WORD, JavascriptParserAssign, JavascriptParserBlockPreModuleDeclaration,
+    JavascriptParserBlockPreStatement, JavascriptParserClassBodyElement,
+    JavascriptParserClassBodyValue, JavascriptParserClassExtendsExpression,
+    JavascriptParserDeclarator, JavascriptParserFinish, JavascriptParserIdentifier,
+    JavascriptParserMember, JavascriptParserModuleDeclaration, JavascriptParserPlugin,
+    JavascriptParserPluginContext, JavascriptParserPreDeclarator, JavascriptParserPreStatement,
+    JavascriptParserProgram, JavascriptParserStatement, JavascriptParserThis,
+  },
   side_effects_parser_plugin::{
     is_pure_class, is_pure_class_member, is_pure_expression, is_pure_function,
   },
@@ -60,7 +71,7 @@ pub enum InnerGraphMapValue {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum InnerGraphMapUsage {
+pub(crate) enum InnerGraphMapUsage {
   TopLevel(TopLevelSymbol),
   Value(Atom),
   True,
@@ -297,7 +308,11 @@ impl InnerGraphPlugin {
     }
   }
 
-  pub fn add_variable_usage(parser: &mut JavascriptParser, name: &Atom, usage: InnerGraphMapUsage) {
+  pub(crate) fn add_variable_usage(
+    parser: &mut JavascriptParser,
+    name: &Atom,
+    usage: InnerGraphMapUsage,
+  ) {
     let symbol = parser
       .get_tag_data(name, TOP_LEVEL_SYMBOL)
       .map(TopLevelSymbol::downcast)
@@ -322,7 +337,7 @@ impl InnerGraphPlugin {
     // When inner graph is disabled, we skip adding PureExpressionDependency (same as None)
   }
 
-  pub fn tag_top_level_symbol(
+  pub(crate) fn tag_top_level_symbol(
     parser: &mut crate::visitors::JavascriptParser,
     name: &Atom,
   ) -> TopLevelSymbol {
@@ -349,8 +364,7 @@ impl InnerGraphPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for InnerGraphPlugin {
+impl InnerGraphPlugin {
   fn program(
     &self,
     parser: &mut crate::visitors::JavascriptParser,
@@ -812,5 +826,159 @@ impl JavascriptParserPlugin for InnerGraphPlugin {
   ) -> Option<bool> {
     Self::for_each_expression(parser, for_name);
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserProgram,
+  program(parser: &mut crate::visitors::JavascriptParser, ast: &swc_core::ecma::ast::Program) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserFinish,
+  finish(parser: &mut JavascriptParser) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserPreStatement,
+  pre_statement(parser: &mut crate::visitors::JavascriptParser, stmt: Statement) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserBlockPreStatement,
+  block_pre_statement(parser: &mut crate::visitors::JavascriptParser, stmt: Statement) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserBlockPreModuleDeclaration,
+  block_pre_module_declaration(
+    parser: &mut crate::visitors::JavascriptParser,
+    export_decl: &ModuleDecl
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut crate::visitors::JavascriptParser,
+    decl: &VarDeclarator,
+    stmt: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserStatement,
+  statement(parser: &mut crate::visitors::JavascriptParser, stmt: Statement) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserModuleDeclaration,
+  module_declaration(parser: &mut JavascriptParser, stmt: &ModuleDecl) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserClassExtendsExpression,
+  class_extends_expression(
+    parser: &mut JavascriptParser,
+    super_class: &Expr,
+    class_decl_or_expr: crate::visitors::ClassDeclOrExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserClassBodyElement,
+  class_body_element(
+    parser: &mut JavascriptParser,
+    element: &ClassMember,
+    class_decl_or_expr: crate::visitors::ClassDeclOrExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserClassBodyValue,
+  class_body_value(
+    parser: &mut JavascriptParser,
+    element: &swc_core::ecma::ast::ClassMember,
+    expr_span: Span,
+    class_decl_or_expr: crate::visitors::ClassDeclOrExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserDeclarator,
+  declarator(
+    parser: &mut JavascriptParser,
+    decl: &swc_core::ecma::ast::VarDeclarator,
+    stmt: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserAssign,
+  assign(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::AssignExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InnerGraphPlugin,
+  JavascriptParserThis,
+  this(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::ThisExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for InnerGraphPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.program.tap(self.clone());
+    context.hooks.finish.tap(self.clone());
+    context.hooks.pre_statement.tap(self.clone());
+    context.hooks.block_pre_statement.tap(self.clone());
+    context.hooks.block_pre_module_declaration.tap(self.clone());
+    context.hooks.pre_declarator.tap(self.clone());
+    context.hooks.statement.tap(self.clone());
+    context.hooks.module_declaration.tap(self.clone());
+    context.hooks.class_extends_expression.tap(self.clone());
+    context.hooks.class_body_element.tap(self.clone());
+    context.hooks.class_body_value.tap(self.clone());
+    context.hooks.declarator.tap(self.clone());
+    context
+      .hooks
+      .member
+      .r#for(TOP_LEVEL_SYMBOL)
+      .tap(self.clone());
+    context
+      .hooks
+      .assign
+      .r#for(TOP_LEVEL_SYMBOL)
+      .tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(TOP_LEVEL_SYMBOL)
+      .tap(self.clone());
+    context.hooks.this.r#for(TOP_LEVEL_SYMBOL).tap(self);
   }
 }

@@ -1,7 +1,7 @@
 use swc_core::ecma::ast::{CallExpr, Callee, MemberProp};
 
 use super::BasicEvaluatedExpression;
-use crate::{parser_plugin::JavascriptParserPlugin, visitors::JavascriptParser};
+use crate::visitors::JavascriptParser;
 
 #[inline]
 pub fn eval_call_expression<'a>(

@@ -66,10 +66,10 @@ async fn nmf_parser(
 ) -> Result<()> {
   if let Some(parser) = parser.downcast_mut::<JavaScriptParserAndGenerator>() {
     if module_type.is_js_like() {
-      parser.add_parser_plugin(Box::new(HashbangParserPlugin) as BoxJavascriptParserPlugin);
-      parser.add_parser_plugin(Box::new(ReactDirectivesParserPlugin) as BoxJavascriptParserPlugin);
+      parser.add_parser_plugin(Arc::new(HashbangParserPlugin) as BoxJavascriptParserPlugin);
+      parser.add_parser_plugin(Arc::new(ReactDirectivesParserPlugin) as BoxJavascriptParserPlugin);
       parser.add_parser_plugin(
-        Box::new(RslibParserPlugin::new(self.options.intercept_api_plugin))
+        Arc::new(RslibParserPlugin::new(self.options.intercept_api_plugin))
           as BoxJavascriptParserPlugin,
       );
     }
@@ -77,7 +77,7 @@ async fn nmf_parser(
     if module_type.is_js_esm() && self.options.force_node_shims {
       // force_node_shims means we want to handle CJS shims (__dirname/__filename) in ESM modules
       // So we use handle_cjs=true to enable __dirname/__filename handling
-      parser.add_parser_plugin(Box::new(
+      parser.add_parser_plugin(Arc::new(
         rspack_plugin_javascript::node_stuff_plugin::NodeStuffPlugin::new(true, false),
       ) as BoxJavascriptParserPlugin);
     }

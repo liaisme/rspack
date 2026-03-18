@@ -24,7 +24,7 @@ use super::{
   estree::{ClassDeclOrExpr, MaybeNamedClassDecl, MaybeNamedFunctionDecl, Statement},
 };
 use crate::{
-  parser_plugin::{JavascriptParserPlugin, is_logic_op},
+  parser_plugin::is_logic_op,
   visitors::{
     AtomMembers, ExportedVariableInfo, ExprRef, VariableDeclaration,
     dependency::parser::ExtractedMemberExpressionChainData, get_non_optional_part,

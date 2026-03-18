@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{ConstDependency, RuntimeGlobals, RuntimeRequirementsDependency};
 use rspack_util::SpanExt;
 use swc_core::{
@@ -6,7 +8,10 @@ use swc_core::{
 };
 
 use crate::{
-  JavascriptParserPlugin,
+  JavascriptParserCall, JavascriptParserCanRename, JavascriptParserEvaluateIdentifier,
+  JavascriptParserEvaluateTypeof, JavascriptParserIdentifier, JavascriptParserMember,
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserRename,
+  JavascriptParserTypeof,
   utils::eval::{BasicEvaluatedExpression, evaluate_to_identifier, evaluate_to_string},
   visitors::JavascriptParser,
 };
@@ -18,8 +23,7 @@ const REQUIRE: &str = "require";
 const DEFINE_AMD: &str = "define.amd";
 const REQUIRE_AMD: &str = "require.amd";
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for AMDParserPlugin {
+impl AMDParserPlugin {
   fn call(
     &self,
     parser: &mut JavascriptParser,
@@ -185,5 +189,90 @@ impl JavascriptParserPlugin for AMDParserPlugin {
       return Some(false);
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserMember,
+  member(parser: &mut JavascriptParser, expr: &MemberExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserTypeof,
+  r#typeof(parser: &mut JavascriptParser, expr: &UnaryExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserCanRename,
+  can_rename(parser: &mut JavascriptParser, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDParserPlugin,
+  JavascriptParserRename,
+  rename(parser: &mut JavascriptParser, expr: &Expr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for AMDParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    for key in ["require.config", "requirejs.config"] {
+      context.hooks.call.r#for(key).tap(self.clone());
+    }
+    for key in [
+      "require.version",
+      "requirejs.onError",
+      DEFINE_AMD,
+      REQUIRE_AMD,
+    ] {
+      context.hooks.member.r#for(key).tap(self.clone());
+    }
+    for key in [DEFINE, REQUIRE, DEFINE_AMD, REQUIRE_AMD] {
+      context.hooks.r#typeof.r#for(key).tap(self.clone());
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+    }
+    context.hooks.identifier.r#for(DEFINE).tap(self.clone());
+    for key in [DEFINE_AMD, REQUIRE_AMD] {
+      context
+        .hooks
+        .evaluate_identifier
+        .r#for(key)
+        .tap(self.clone());
+    }
+    context.hooks.can_rename.r#for(DEFINE).tap(self.clone());
+    context.hooks.rename.r#for(DEFINE).tap(self);
   }
 }

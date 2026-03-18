@@ -1,10 +1,13 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use cow_utils::CowUtils;
 use rspack_util::SpanExt;
 use swc_core::ecma::ast::CallExpr;
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserEvaluateCallExpression, JavascriptParserEvaluateCallExpressionMember,
+  JavascriptParserPlugin, JavascriptParserPluginContext,
+};
 use crate::{utils::eval::BasicEvaluatedExpression, visitors::JavascriptParser};
 
 const SLICE_METHOD_NAME: &str = "slice";
@@ -17,8 +20,7 @@ const SUBSTRING_METHOD_NAME: &str = "substring";
 
 pub struct InitializeEvaluating;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for InitializeEvaluating {
+impl InitializeEvaluating {
   fn evaluate_call_expression<'a>(
     &self,
     parser: &mut JavascriptParser,
@@ -284,6 +286,35 @@ impl JavascriptParserPlugin for InitializeEvaluating {
     }
 
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  InitializeEvaluating,
+  JavascriptParserEvaluateCallExpression,
+  <'a>,
+  evaluate_call_expression(
+    parser: &mut JavascriptParser,
+    name: &str,
+    expr: &'a CallExpr
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  InitializeEvaluating,
+  JavascriptParserEvaluateCallExpressionMember,
+  <'a>,
+  evaluate_call_expression_member(
+    parser: &mut crate::visitors::JavascriptParser,
+    property: &str,
+    expr: &'a swc_core::ecma::ast::CallExpr,
+    param: BasicEvaluatedExpression<'a>
+  ) -> BasicEvaluatedExpression<'a>
+);
+
+impl JavascriptParserPlugin for InitializeEvaluating {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.evaluate_call_expression.tap(self.clone());
+    context.hooks.evaluate_call_expression_member.tap(self);
   }
 }
 

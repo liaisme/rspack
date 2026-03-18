@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use rspack_core::{DependencyRange, SideEffectsBailoutItemWithSpan};
 use swc_core::{
@@ -15,7 +15,8 @@ use swc_core::{
 };
 
 use crate::{
-  ClassExt, JavascriptParserPlugin,
+  ClassExt, JavascriptParserModuleDeclaration, JavascriptParserPlugin,
+  JavascriptParserPluginContext, JavascriptParserStatement,
   visitors::{JavascriptParser, Statement, VariableDeclaration},
 };
 
@@ -34,8 +35,7 @@ impl SideEffectsParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for SideEffectsParserPlugin {
+impl SideEffectsParserPlugin {
   fn module_declaration(&self, parser: &mut JavascriptParser, decl: &ModuleDecl) -> Option<bool> {
     match decl {
       ModuleDecl::ExportDefaultExpr(expr) => {
@@ -70,6 +70,24 @@ impl JavascriptParserPlugin for SideEffectsParserPlugin {
     }
     self.analyze_stmt_side_effects(&stmt, parser);
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  SideEffectsParserPlugin,
+  JavascriptParserModuleDeclaration,
+  module_declaration(parser: &mut JavascriptParser, decl: &ModuleDecl) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  SideEffectsParserPlugin,
+  JavascriptParserStatement,
+  statement(parser: &mut JavascriptParser, stmt: Statement) -> bool
+);
+
+impl JavascriptParserPlugin for SideEffectsParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.module_declaration.tap(self.clone());
+    context.hooks.statement.tap(self);
   }
 }
 

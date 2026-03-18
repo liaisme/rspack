@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{BuildMetaDefaultObject, BuildMetaExportsType, DependencyRange, RuntimeGlobals};
 use rspack_util::SpanExt;
 use swc_core::{
@@ -9,7 +11,12 @@ use swc_core::{
   },
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserAssignMemberChain, JavascriptParserCall, JavascriptParserCallMemberChain,
+  JavascriptParserEvaluateTypeof, JavascriptParserIdentifier, JavascriptParserMember,
+  JavascriptParserMemberChain, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserThis,
+};
 use crate::{
   dependency::{
     CommonJsExportRequireDependency, CommonJsExportsDependency, CommonJsSelfReferenceDependency,
@@ -272,8 +279,7 @@ impl CommonJsExportsParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for CommonJsExportsParserPlugin {
+impl CommonJsExportsParserPlugin {
   fn assign_member_chain(
     &self,
     parser: &mut JavascriptParser,
@@ -563,5 +569,99 @@ impl JavascriptParserPlugin for CommonJsExportsParserPlugin {
         expr.span.real_hi(),
       )
     })
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserAssignMemberChain,
+  assign_member_chain(
+    parser: &mut JavascriptParser,
+    assign_expr: &AssignExpr,
+    remaining: &[Atom],
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserThis,
+  this(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::ThisExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserMember,
+  member(parser: &mut JavascriptParser, expr: &MemberExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserMemberChain,
+  member_chain(
+    parser: &mut JavascriptParser,
+    expr: &MemberExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserCallMemberChain,
+  call_member_chain(
+    parser: &mut JavascriptParser,
+    expr: &CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  CommonJsExportsParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+
+impl JavascriptParserPlugin for CommonJsExportsParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    for key in ["exports", "module", "this"] {
+      context
+        .hooks
+        .assign_member_chain
+        .r#for(key)
+        .tap(self.clone());
+      context.hooks.member_chain.r#for(key).tap(self.clone());
+      context.hooks.call_member_chain.r#for(key).tap(self.clone());
+    }
+    context
+      .hooks
+      .call
+      .r#for("Object.defineProperty")
+      .tap(self.clone());
+    for key in ["module", "exports"] {
+      context.hooks.identifier.r#for(key).tap(self.clone());
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+    }
+    context.hooks.this.r#for("this").tap(self.clone());
+    context.hooks.member.r#for("module.exports").tap(self);
   }
 }

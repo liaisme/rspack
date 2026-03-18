@@ -14,7 +14,6 @@ use super::{
   estree::{MaybeNamedFunctionDecl, Statement},
 };
 use crate::{
-  parser_plugin::JavascriptParserPlugin,
   utils::eval,
   visitors::{DestructuringAssignmentProperties, VariableDeclaration, VariableDeclarationKind},
 };

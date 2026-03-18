@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{
   ContextMode, ContextOptions, DependencyCategory, try_convert_str_to_context_mode,
 };
@@ -5,7 +7,7 @@ use rspack_regex::RspackRegex;
 use rspack_util::SpanExt;
 use swc_core::{common::Spanned, ecma::ast::CallExpr};
 
-use super::JavascriptParserPlugin;
+use super::{JavascriptParserCall, JavascriptParserPlugin, JavascriptParserPluginContext};
 use crate::{
   dependency::RequireContextDependency,
   visitors::{JavascriptParser, clean_regexp_in_context_module, default_context_reg_exp},
@@ -13,8 +15,7 @@ use crate::{
 
 pub struct RequireContextDependencyParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for RequireContextDependencyParserPlugin {
+impl RequireContextDependencyParserPlugin {
   fn call(&self, parser: &mut JavascriptParser, expr: &CallExpr, for_name: &str) -> Option<bool> {
     if for_name != "require.context" {
       return None;
@@ -93,5 +94,17 @@ impl JavascriptParserPlugin for RequireContextDependencyParserPlugin {
     }
 
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  RequireContextDependencyParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, expr: &CallExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for RequireContextDependencyParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.call.r#for("require.context").tap(self);
   }
 }

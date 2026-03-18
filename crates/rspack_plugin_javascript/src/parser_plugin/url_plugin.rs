@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{
   ContextDependency, ContextMode, ContextNameSpaceObject, ContextOptions, DependencyCategory,
   JavascriptParserUrl, RuntimeGlobals, RuntimeRequirementsDependency,
@@ -12,7 +14,10 @@ use swc_core::{
 };
 use url::Url;
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCanRename, JavascriptParserIsPure, JavascriptParserNewExpression,
+  JavascriptParserPlugin, JavascriptParserPluginContext,
+};
 use crate::{
   InnerGraphPlugin,
   dependency::{URLContextDependency, URLDependency},
@@ -103,8 +108,7 @@ pub struct URLPlugin {
   pub mode: Option<JavascriptParserUrl>,
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for URLPlugin {
+impl URLPlugin {
   fn can_rename(&self, _parser: &mut JavascriptParser, for_name: &str) -> Option<bool> {
     (for_name == "URL").then_some(true)
   }
@@ -224,5 +228,29 @@ impl JavascriptParserPlugin for URLPlugin {
     }
     get_url_request(parser, expr)?;
     Some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  URLPlugin,
+  JavascriptParserCanRename,
+  can_rename(parser: &mut JavascriptParser, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  URLPlugin,
+  JavascriptParserNewExpression,
+  new_expression(parser: &mut JavascriptParser, expr: &NewExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  URLPlugin,
+  JavascriptParserIsPure,
+  is_pure(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+
+impl JavascriptParserPlugin for URLPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.can_rename.r#for("URL").tap(self.clone());
+    context.hooks.new_expression.r#for("URL").tap(self.clone());
+    context.hooks.is_pure.tap(self);
   }
 }

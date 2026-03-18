@@ -1,13 +1,14 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
 use swc_core::atoms::wtf8::Wtf8;
 
-use super::JavascriptParserPlugin;
+use super::{JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserProgram};
 use crate::visitors::JavascriptParser;
 
 pub struct UseStrictPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for UseStrictPlugin {
+impl UseStrictPlugin {
   fn program(
     &self,
     parser: &mut JavascriptParser,
@@ -31,5 +32,17 @@ impl JavascriptParserPlugin for UseStrictPlugin {
       parser.build_info.strict = true;
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  UseStrictPlugin,
+  JavascriptParserProgram,
+  program(parser: &mut JavascriptParser, ast: &swc_core::ecma::ast::Program) -> bool
+);
+
+impl JavascriptParserPlugin for UseStrictPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.program.tap(self);
   }
 }

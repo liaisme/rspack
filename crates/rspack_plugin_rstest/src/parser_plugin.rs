@@ -1,9 +1,14 @@
+use std::sync::Arc;
+
 use camino::Utf8PathBuf;
 use rspack_core::{
   AsyncDependenciesBlock, ConstDependency, DependencyRange, ImportAttributes, ImportPhase,
 };
 use rspack_plugin_javascript::{
-  JavascriptParserPlugin,
+  JavascriptParserCallMemberChain, JavascriptParserDeclarator, JavascriptParserEvaluateIdentifier,
+  JavascriptParserEvaluateTypeof, JavascriptParserIdentifier, JavascriptParserImportCall,
+  JavascriptParserMember, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserStatement, JavascriptParserTypeof,
   dependency::{CommonJsRequireDependency, ImportDependency, RequireHeaderDependency},
   utils::{
     self,
@@ -29,6 +34,7 @@ const DIR_NAME: &str = "__dirname";
 const FILE_NAME: &str = "__filename";
 const IMPORT_META_DIRNAME: &str = "import.meta.dirname";
 const IMPORT_META_FILENAME: &str = "import.meta.filename";
+const ESM_SPECIFIER_TAG: &str = "_identifier__esm_specifier_tag__";
 
 #[derive(PartialEq)]
 enum ModulePathType {
@@ -649,8 +655,7 @@ impl RstestParserPlugin {
   }
 }
 
-#[rspack_plugin_javascript::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for RstestParserPlugin {
+impl RstestParserPlugin {
   fn declarator(
     &self,
     parser: &mut JavascriptParser,
@@ -894,5 +899,157 @@ impl JavascriptParserPlugin for RstestParserPlugin {
     }
 
     None
+  }
+}
+
+#[derive(Clone)]
+struct RstestParserPluginTap(Arc<RstestParserPlugin>);
+
+impl JavascriptParserDeclarator for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::VarDeclarator,
+    stmt: VariableDeclaration<'_>,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.declarator(parser, expr, stmt))
+  }
+}
+
+impl JavascriptParserStatement for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    stmt: Statement,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.statement(parser, stmt))
+  }
+}
+
+impl JavascriptParserImportCall for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    call_expr: &CallExpr,
+    import_then: Option<&CallExpr>,
+    members: Option<(&[Atom], bool)>,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.import_call(parser, call_expr, import_then, members))
+  }
+}
+
+impl JavascriptParserCallMemberChain for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    call_expr: &CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span],
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.call_member_chain(
+      parser,
+      call_expr,
+      for_name,
+      members,
+      members_optionals,
+      member_ranges,
+    ))
+  }
+}
+
+impl JavascriptParserIdentifier for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut rspack_plugin_javascript::visitors::JavascriptParser,
+    ident: &Ident,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.identifier(parser, ident, for_name))
+  }
+}
+
+impl JavascriptParserEvaluateTypeof for RstestParserPluginTap {
+  fn run<'a>(
+    &self,
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<utils::eval::BasicEvaluatedExpression<'a>>> {
+    Ok(self.0.evaluate_typeof(parser, expr, for_name))
+  }
+}
+
+impl JavascriptParserEvaluateIdentifier for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32,
+  ) -> rspack_error::Result<Option<eval::BasicEvaluatedExpression<'static>>> {
+    Ok(self.0.evaluate_identifier(parser, for_name, start, end))
+  }
+}
+
+impl JavascriptParserTypeof for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    unary_expr: &UnaryExpr,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.r#typeof(parser, unary_expr, for_name))
+  }
+}
+
+impl JavascriptParserMember for RstestParserPluginTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    member_expr: &MemberExpr,
+    for_name: &str,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.member(parser, member_expr, for_name))
+  }
+}
+
+impl JavascriptParserPlugin for RstestParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    let globals = self.options.globals;
+    let module_path_name = self.options.module_path_name;
+    let import_meta_path_name = self.options.import_meta_path_name;
+    let tap = RstestParserPluginTap(self);
+    context.hooks.declarator.tap(tap.clone());
+    context.hooks.statement.tap(tap.clone());
+    context.hooks.import_call.tap(tap.clone());
+    context
+      .hooks
+      .call_member_chain
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(tap.clone());
+    if globals {
+      for key in ["rs", "rstest"] {
+        context.hooks.call_member_chain.r#for(key).tap(tap.clone());
+      }
+    }
+    if module_path_name {
+      for key in [DIR_NAME, FILE_NAME] {
+        context.hooks.identifier.r#for(key).tap(tap.clone());
+      }
+    }
+    if import_meta_path_name {
+      for key in [IMPORT_META_DIRNAME, IMPORT_META_FILENAME] {
+        context.hooks.evaluate_typeof.r#for(key).tap(tap.clone());
+        context
+          .hooks
+          .evaluate_identifier
+          .r#for(key)
+          .tap(tap.clone());
+        context.hooks.r#typeof.r#for(key).tap(tap.clone());
+        context.hooks.member.r#for(key).tap(tap.clone());
+      }
+    }
   }
 }

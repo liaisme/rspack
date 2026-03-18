@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{hash::Hash, sync::Arc};
 
 use itertools::Itertools;
 use rspack_core::{
@@ -15,7 +15,9 @@ use swc_core::{
 use url::Url;
 
 use super::{
-  JavascriptParserPlugin,
+  JavascriptParserCall, JavascriptParserCallMemberChain, JavascriptParserNewExpression,
+  JavascriptParserPattern, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserPreDeclarator,
   esm_import_dependency_parser_plugin::{ESM_SPECIFIER_TAG, ESMSpecifierData},
   url_plugin::get_url_request,
 };
@@ -306,8 +308,7 @@ impl WorkerPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for WorkerPlugin {
+impl WorkerPlugin {
   fn pre_declarator(
     &self,
     parser: &mut JavascriptParser,
@@ -511,6 +512,81 @@ impl JavascriptParserPlugin for WorkerPlugin {
         }
         true
       })
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  WorkerPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    decl: &VarDeclarator,
+    statement: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  WorkerPlugin,
+  JavascriptParserPattern,
+  pattern(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  WorkerPlugin,
+  JavascriptParserCallMemberChain,
+  call_member_chain(
+    parser: &mut JavascriptParser,
+    call_expr: &CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  WorkerPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  WorkerPlugin,
+  JavascriptParserNewExpression,
+  new_expression(
+    parser: &mut JavascriptParser,
+    new_expr: &NewExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for WorkerPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.pre_declarator.tap(self.clone());
+    for key in self.pattern_syntax.keys() {
+      context.hooks.pattern.r#for(key.as_str()).tap(self.clone());
+    }
+    context
+      .hooks
+      .call_member_chain
+      .r#for(WORKER_SPECIFIER_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(self.clone());
+    for key in &self.call_syntax {
+      context.hooks.call.r#for(key.as_str()).tap(self.clone());
+    }
+    context
+      .hooks
+      .new_expression
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(self.clone());
+    for key in &self.new_syntax {
+      context
+        .hooks
+        .new_expression
+        .r#for(key.as_str())
+        .tap(self.clone());
+    }
   }
 }
 

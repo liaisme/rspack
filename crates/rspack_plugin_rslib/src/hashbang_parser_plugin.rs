@@ -1,11 +1,15 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
-use rspack_plugin_javascript::{JavascriptParserPlugin, visitors::JavascriptParser};
+use rspack_plugin_javascript::{
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserProgram,
+  visitors::JavascriptParser,
+};
 use swc_core::ecma::ast::Program;
 
 pub struct HashbangParserPlugin;
 
-#[rspack_plugin_javascript::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for HashbangParserPlugin {
+impl HashbangParserPlugin {
   fn program(&self, parser: &mut JavascriptParser, ast: &Program) -> Option<bool> {
     let hashbang = ast
       .as_module()
@@ -40,5 +44,26 @@ impl JavascriptParserPlugin for HashbangParserPlugin {
     )));
 
     None
+  }
+}
+
+struct HashbangParserPluginProgramTap(Arc<HashbangParserPlugin>);
+
+impl JavascriptParserProgram for HashbangParserPluginProgramTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    ast: &Program,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.program(parser, ast))
+  }
+}
+
+impl JavascriptParserPlugin for HashbangParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .program
+      .tap(HashbangParserPluginProgramTap(self));
   }
 }

@@ -7,11 +7,15 @@ use std::{
 };
 
 use rspack_util::SpanExt;
+use rustc_hash::FxHashSet;
 use swc_core::ecma::ast::Expr;
 
 use super::{VALUE_DEP_PREFIX, utils::gen_const_dep, walk_data::WalkData};
 use crate::{
-  JavascriptParserPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties, JavascriptParserCanRename,
+  JavascriptParserEvaluateIdentifier, JavascriptParserEvaluateTypeof, JavascriptParserIdentifier,
+  JavascriptParserMember, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserTypeof,
   define_plugin::walk_data::DefineRecord,
   utils::eval::{BasicEvaluatedExpression, evaluate_to_string},
   visitors::{AllowedMemberTypes, JavascriptParser, MemberExpressionInfo},
@@ -51,8 +55,7 @@ impl DefineParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for DefineParserPlugin {
+impl DefineParserPlugin {
   fn can_rename(&self, parser: &mut JavascriptParser, str: &str) -> Option<bool> {
     if let Some(first_key) = self.walk_data.can_rename.get(str) {
       self.add_value_dependency(parser, str);
@@ -239,5 +242,109 @@ impl JavascriptParserPlugin for DefineParserPlugin {
       );
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserCanRename,
+  can_rename(parser: &mut JavascriptParser, str: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> crate::utils::eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties,
+  can_collect_destructuring_assignment_properties(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  DefineParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for DefineParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    for key in self.walk_data.can_rename.keys() {
+      context
+        .hooks
+        .can_rename
+        .r#for(key.as_ref())
+        .tap(self.clone());
+    }
+
+    let mut expression_keys: FxHashSet<&str> = FxHashSet::default();
+    expression_keys.extend(self.walk_data.define_record.keys().map(|key| key.as_ref()));
+    expression_keys.extend(
+      self
+        .walk_data
+        .typeof_define_record
+        .keys()
+        .map(|key| key.as_ref()),
+    );
+    expression_keys.extend(
+      self
+        .walk_data
+        .object_define_record
+        .keys()
+        .map(|key| key.as_ref()),
+    );
+
+    for key in expression_keys {
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+      context
+        .hooks
+        .evaluate_identifier
+        .r#for(key)
+        .tap(self.clone());
+      context.hooks.r#typeof.r#for(key).tap(self.clone());
+      context.hooks.member.r#for(key).tap(self.clone());
+      context.hooks.identifier.r#for(key).tap(self.clone());
+    }
+
+    context
+      .hooks
+      .can_collect_destructuring_assignment_properties
+      .tap(self);
   }
 }

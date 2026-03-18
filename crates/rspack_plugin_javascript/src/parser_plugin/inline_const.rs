@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use rspack_core::EvaluatedInlinableValue;
 use rspack_util::ryu_js;
 use swc_core::ecma::ast::{ModuleDecl, ModuleItem, Program, VarDeclarator};
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserEvaluateIdentifier, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserPreDeclarator, JavascriptParserProgram,
+};
 use crate::{
   utils::eval::{
     BasicEvaluatedExpression, evaluate_to_boolean, evaluate_to_null, evaluate_to_number,
@@ -24,8 +29,7 @@ pub struct InlinableConstData {
 #[derive(Default)]
 pub struct InlineConstPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for InlineConstPlugin {
+impl InlineConstPlugin {
   fn program(&self, parser: &mut JavascriptParser, program: &Program) -> Option<bool> {
     if let Some(module) = program.as_module() {
       for item in &module.body {
@@ -98,6 +102,43 @@ impl JavascriptParserPlugin for InlineConstPlugin {
       }
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  InlineConstPlugin,
+  JavascriptParserProgram,
+  program(parser: &mut JavascriptParser, program: &Program) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  InlineConstPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  InlineConstPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    declarator: &VarDeclarator,
+    declaration: VariableDeclaration<'_>
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for InlineConstPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.program.tap(self.clone());
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(INLINABLE_CONST_TAG)
+      .tap(self.clone());
+    context.hooks.pre_declarator.tap(self);
   }
 }
 

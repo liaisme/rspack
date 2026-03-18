@@ -438,12 +438,12 @@ async fn normal_module_factory_parser(
 ) -> Result<()> {
   if let Some(parser) = parser.downcast_mut::<JavaScriptParserAndGenerator>() {
     if module_type.is_js_auto() {
-      parser.add_parser_plugin(Box::new(ModuleHotReplacementParserPlugin::new()));
-      parser.add_parser_plugin(Box::new(ImportMetaHotReplacementParserPlugin::new()));
+      parser.add_parser_plugin(Arc::new(ModuleHotReplacementParserPlugin::new()));
+      parser.add_parser_plugin(Arc::new(ImportMetaHotReplacementParserPlugin::new()));
     } else if module_type.is_js_dynamic() {
-      parser.add_parser_plugin(Box::new(ModuleHotReplacementParserPlugin::new()));
+      parser.add_parser_plugin(Arc::new(ModuleHotReplacementParserPlugin::new()));
     } else if module_type.is_js_esm() {
-      parser.add_parser_plugin(Box::new(ImportMetaHotReplacementParserPlugin::new()));
+      parser.add_parser_plugin(Arc::new(ImportMetaHotReplacementParserPlugin::new()));
     }
   } else if matches!(
     module_type,
@@ -503,3 +503,4 @@ struct HotUpdateContent {
   removed_chunk_ids: ChunkIdSet,
   removed_modules: HashSet<ModuleId>,
 }
+use std::sync::Arc;

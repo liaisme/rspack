@@ -115,7 +115,7 @@ async fn nmf_parser(
   if module_type.is_js_like()
     && let Some(parser) = parser.downcast_mut::<JavaScriptParserAndGenerator>()
   {
-    parser.add_parser_plugin(Box::new(RstestParserPlugin::new(
+    parser.add_parser_plugin(Arc::new(RstestParserPlugin::new(
       crate::parser_plugin::RstestParserPluginOptions {
         module_path_name: self.options.module_path_name,
         hoist_mock_module: self.options.hoist_mock_module,

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use itertools::Itertools;
 use rspack_core::{ConstDependency, DependencyRange, ImportMeta, property_access};
 use rspack_error::{Error, Severity};
@@ -8,7 +10,13 @@ use swc_core::{
 };
 use url::Url;
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserCanCollectDestructuringAssignmentProperties,
+  JavascriptParserEvaluate, JavascriptParserEvaluateIdentifier, JavascriptParserEvaluateTypeofAny,
+  JavascriptParserMember, JavascriptParserMetaProperty, JavascriptParserPlugin,
+  JavascriptParserPluginContext, JavascriptParserTypeof,
+  JavascriptParserUnhandledExpressionMemberChain,
+};
 use crate::{
   dependency::{ImportMetaResolveDependency, ImportMetaResolveHeaderDependency},
   utils::eval,
@@ -87,8 +95,7 @@ impl ImportMetaPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ImportMetaPlugin {
+impl ImportMetaPlugin {
   fn evaluate_typeof<'a>(
     &self,
     _parser: &mut JavascriptParser,
@@ -389,7 +396,7 @@ impl JavascriptParserPlugin for ImportMetaPlugin {
 // use when parser.import_meta is false
 pub struct ImportMetaDisabledPlugin;
 
-impl JavascriptParserPlugin for ImportMetaDisabledPlugin {
+impl ImportMetaDisabledPlugin {
   fn meta_property(
     &self,
     parser: &mut JavascriptParser,
@@ -408,5 +415,133 @@ impl JavascriptParserPlugin for ImportMetaDisabledPlugin {
     } else {
       None
     }
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserEvaluateTypeofAny,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> eval::BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserEvaluate,
+  <'a>,
+  evaluate(parser: &mut JavascriptParser, expr: &'a Expr) -> eval::BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    unary_expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties,
+  can_collect_destructuring_assignment_properties(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserMetaProperty,
+  meta_property(
+    parser: &mut JavascriptParser,
+    root_name: &swc_core::atoms::Atom,
+    span: Span
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    member_expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    call_expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaPlugin,
+  JavascriptParserUnhandledExpressionMemberChain,
+  unhandled_expression_member_chain(
+    parser: &mut JavascriptParser,
+    root_info: &ExportedVariableInfo,
+    expr: &swc_core::ecma::ast::MemberExpr
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaDisabledPlugin,
+  JavascriptParserMetaProperty,
+  meta_property(
+    parser: &mut JavascriptParser,
+    root_name: &swc_core::atoms::Atom,
+    span: Span
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ImportMetaPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.evaluate_typeof_any.tap(self.clone());
+    for key in [expr_name::IMPORT_META_URL, expr_name::IMPORT_META_VERSION] {
+      context
+        .hooks
+        .evaluate_identifier
+        .r#for(key)
+        .tap(self.clone());
+    }
+    context.hooks.evaluate.tap(self.clone());
+    for key in [
+      expr_name::IMPORT_META,
+      expr_name::IMPORT_META_URL,
+      expr_name::IMPORT_META_RESOLVE,
+      expr_name::IMPORT_META_VERSION,
+    ] {
+      context.hooks.r#typeof.r#for(key).tap(self.clone());
+    }
+    context
+      .hooks
+      .can_collect_destructuring_assignment_properties
+      .tap(self.clone());
+    context.hooks.meta_property.tap(self.clone());
+    for key in [expr_name::IMPORT_META_URL, expr_name::IMPORT_META_VERSION] {
+      context.hooks.member.r#for(key).tap(self.clone());
+    }
+    context
+      .hooks
+      .call
+      .r#for(expr_name::IMPORT_META_RESOLVE)
+      .tap(self.clone());
+    context.hooks.unhandled_expression_member_chain.tap(self);
+  }
+}
+
+impl JavascriptParserPlugin for ImportMetaDisabledPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.meta_property.tap(self);
   }
 }

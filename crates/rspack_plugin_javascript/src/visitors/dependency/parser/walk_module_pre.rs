@@ -5,9 +5,8 @@ use swc_core::{
   },
 };
 
-use crate::{
-  JavascriptParserPlugin,
-  visitors::{ExportAllDeclaration, ExportImport, ExportNamedDeclaration, JavascriptParser},
+use crate::visitors::{
+  ExportAllDeclaration, ExportImport, ExportNamedDeclaration, JavascriptParser,
 };
 
 impl JavascriptParser<'_> {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
 use rspack_util::SpanExt;
 use swc_core::{
@@ -5,15 +7,17 @@ use swc_core::{
   ecma::ast::{CallExpr, UnaryExpr},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserTypeof,
+};
 use crate::{dependency::IsIncludeDependency, visitors::JavascriptParser};
 
 const IS_INCLUDED: &str = "__webpack_is_included__";
 
 pub struct IsIncludedPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for IsIncludedPlugin {
+impl IsIncludedPlugin {
   fn call(&self, parser: &mut JavascriptParser, expr: &CallExpr, name: &str) -> Option<bool> {
     if name != IS_INCLUDED || expr.args.len() != 1 || expr.args[0].spread.is_some() {
       return None;
@@ -45,5 +49,23 @@ impl JavascriptParserPlugin for IsIncludedPlugin {
       )));
       true
     })
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  IsIncludedPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, expr: &CallExpr, name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  IsIncludedPlugin,
+  JavascriptParserTypeof,
+  r#typeof(parser: &mut JavascriptParser<'_>, expr: &UnaryExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for IsIncludedPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.call.r#for(IS_INCLUDED).tap(self.clone());
+    context.hooks.r#typeof.r#for(IS_INCLUDED).tap(self);
   }
 }

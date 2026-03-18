@@ -16,7 +16,8 @@ use swc_core::{
 };
 
 use crate::{
-  JavascriptParserPlugin,
+  JavascriptParserCall, JavascriptParserFinish, JavascriptParserPlugin,
+  JavascriptParserPluginContext,
   dependency::{
     AMDRequireContextDependency,
     amd_define_dependency::AMDDefineDependency,
@@ -587,8 +588,7 @@ impl AMDDefineDependencyParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for AMDDefineDependencyParserPlugin {
+impl AMDDefineDependencyParserPlugin {
   fn call(
     &self,
     parser: &mut JavascriptParser,
@@ -615,6 +615,24 @@ impl JavascriptParserPlugin for AMDDefineDependencyParserPlugin {
   }
 }
 
+crate::impl_javascript_parser_hook!(
+  AMDDefineDependencyParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  AMDDefineDependencyParserPlugin,
+  JavascriptParserFinish,
+  finish(parser: &mut JavascriptParser) -> bool
+);
+
+impl JavascriptParserPlugin for AMDDefineDependencyParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.call.r#for("define").tap(self.clone());
+    context.hooks.finish.tap(self);
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -626,3 +644,4 @@ mod tests {
     assert_eq!(lookup("ui/foo", "bar"), "bar");
   }
 }
+use std::sync::Arc;

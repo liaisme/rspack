@@ -1,6 +1,8 @@
+use std::{borrow::Borrow, hash::Hash};
+
 use async_trait::async_trait;
 use rspack_error::Result;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[async_trait]
 pub trait Interceptor<H: Hook> {
@@ -26,6 +28,51 @@ pub trait Hook {
 // pub trait Plugin<HookContainer> {
 //   fn apply(&self, hook_container: &mut HookContainer);
 // }
+
+#[derive(Debug)]
+pub struct HookMap<K, H> {
+  map: FxHashMap<K, H>,
+}
+
+impl<K, H> Default for HookMap<K, H> {
+  fn default() -> Self {
+    Self {
+      map: Default::default(),
+    }
+  }
+}
+
+impl<K, H> HookMap<K, H>
+where
+  K: Eq + Hash,
+  H: Default,
+{
+  pub fn r#for(&mut self, key: impl Into<K>) -> &mut H {
+    self.map.entry(key.into()).or_default()
+  }
+}
+
+impl<K, H> HookMap<K, H> {
+  pub fn get<Q>(&self, key: &Q) -> Option<&H>
+  where
+    K: Borrow<Q> + Eq + Hash,
+    Q: Eq + Hash + ?Sized,
+  {
+    self.map.get(key)
+  }
+
+  pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut H>
+  where
+    K: Borrow<Q> + Eq + Hash,
+    Q: Eq + Hash + ?Sized,
+  {
+    self.map.get_mut(key)
+  }
+
+  pub fn iter(&self) -> impl Iterator<Item = (&K, &H)> {
+    self.map.iter()
+  }
+}
 
 #[doc(hidden)]
 pub mod __macro_helper {

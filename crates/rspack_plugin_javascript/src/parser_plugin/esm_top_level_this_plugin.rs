@@ -1,12 +1,13 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
 
-use super::JavascriptParserPlugin;
+use super::{JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserThis};
 use crate::visitors::JavascriptParser;
 
 pub struct ESMTopLevelThisParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ESMTopLevelThisParserPlugin {
+impl ESMTopLevelThisParserPlugin {
   fn this(
     &self,
     parser: &mut JavascriptParser,
@@ -20,5 +21,21 @@ impl JavascriptParserPlugin for ESMTopLevelThisParserPlugin {
       )));
       true
     })
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ESMTopLevelThisParserPlugin,
+  JavascriptParserThis,
+  this(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::ThisExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ESMTopLevelThisParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.this.r#for("this").tap(self);
   }
 }

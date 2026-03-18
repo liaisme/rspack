@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{
   ConstDependency, DependencyRange, DependencyType, ExportPresenceMode, ImportAttributes,
   ImportPhase,
@@ -8,7 +10,12 @@ use swc_core::{
   ecma::ast::{BinExpr, BinaryOp, Callee, Expr, Ident, ImportDecl},
 };
 
-use super::{InnerGraphPlugin, JavascriptParserPlugin};
+use super::{
+  InnerGraphPlugin, JavascriptParserBinaryExpression, JavascriptParserCallMemberChain,
+  JavascriptParserCanCollectDestructuringAssignmentProperties, JavascriptParserIdentifier,
+  JavascriptParserImport, JavascriptParserImportSpecifier, JavascriptParserMemberChain,
+  JavascriptParserPlugin, JavascriptParserPluginContext,
+};
 use crate::{
   dependency::{ESMImportSideEffectDependency, ESMImportSpecifierDependency},
   parser_plugin::inner_graph::state::InnerGraphUsageOperation,
@@ -34,8 +41,7 @@ pub struct ESMSpecifierData {
   pub attributes: Option<ImportAttributes>,
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ESMImportDependencyParserPlugin {
+impl ESMImportDependencyParserPlugin {
   fn import(
     &self,
     parser: &mut JavascriptParser,
@@ -358,5 +364,88 @@ impl JavascriptParserPlugin for ESMImportDependencyParserPlugin {
     );
 
     Some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserImport,
+  import(parser: &mut JavascriptParser, import_decl: &ImportDecl, source: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserImportSpecifier,
+  import_specifier(
+    parser: &mut JavascriptParser,
+    statement: &ImportDecl,
+    source: &Atom,
+    id: Option<&Atom>,
+    name: &Atom
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserBinaryExpression,
+  binary_expression(parser: &mut JavascriptParser, expr: &BinExpr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties,
+  can_collect_destructuring_assignment_properties(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserCallMemberChain,
+  call_member_chain(
+    parser: &mut JavascriptParser,
+    call_expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMImportDependencyParserPlugin,
+  JavascriptParserMemberChain,
+  member_chain(
+    parser: &mut JavascriptParser,
+    member_expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ESMImportDependencyParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.import.tap(self.clone());
+    context.hooks.import_specifier.tap(self.clone());
+    context.hooks.binary_expression.tap(self.clone());
+    context
+      .hooks
+      .can_collect_destructuring_assignment_properties
+      .tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .call_member_chain
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .member_chain
+      .r#for(ESM_SPECIFIER_TAG)
+      .tap(self);
   }
 }

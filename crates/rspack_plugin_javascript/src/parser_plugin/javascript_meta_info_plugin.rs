@@ -1,13 +1,17 @@
+use std::sync::Arc;
+
 use rspack_util::atom::Atom;
 use rustc_hash::FxHashSet;
 
-use super::{JavascriptParserPlugin, TopLevelSymbol};
+use super::{
+  JavascriptParserCall, JavascriptParserFinish, JavascriptParserPlugin,
+  JavascriptParserPluginContext, TopLevelSymbol,
+};
 use crate::visitors::JavascriptParser;
 
 pub struct JavascriptMetaInfoPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for JavascriptMetaInfoPlugin {
+impl JavascriptMetaInfoPlugin {
   fn call(
     &self,
     parser: &mut JavascriptParser,
@@ -48,5 +52,27 @@ impl JavascriptParserPlugin for JavascriptMetaInfoPlugin {
       }
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  JavascriptMetaInfoPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  JavascriptMetaInfoPlugin,
+  JavascriptParserFinish,
+  finish(parser: &mut JavascriptParser) -> bool
+);
+
+impl JavascriptParserPlugin for JavascriptMetaInfoPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.call.r#for("eval").tap(self.clone());
+    context.hooks.finish.tap(self);
   }
 }

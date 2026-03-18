@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use rspack_core::{
   AsyncDependenciesBlock, ChunkGroupOptions, ContextDependency, ContextNameSpaceObject,
@@ -16,7 +16,12 @@ use swc_core::{
   },
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCallMemberChain, JavascriptParserCanCollectDestructuringAssignmentProperties,
+  JavascriptParserFinish, JavascriptParserIdentifier, JavascriptParserImportCall,
+  JavascriptParserMemberChain, JavascriptParserPlugin, JavascriptParserPluginContext,
+  JavascriptParserPreDeclarator,
+};
 use crate::{
   dependency::{ImportContextDependency, ImportDependency, ImportEagerDependency},
   magic_comment::try_extract_magic_comment,
@@ -123,8 +128,7 @@ struct ImportTagData {
 
 pub struct ImportParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ImportParserPlugin {
+impl ImportParserPlugin {
   fn can_collect_destructuring_assignment_properties(
     &self,
     parser: &mut JavascriptParser,
@@ -559,6 +563,92 @@ impl JavascriptParserPlugin for ImportParserPlugin {
       };
     }
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserCanCollectDestructuringAssignmentProperties,
+  can_collect_destructuring_assignment_properties(parser: &mut JavascriptParser, expr: &Expr) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    declarator: &VarDeclarator,
+    declaration: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserMemberChain,
+  member_chain(
+    parser: &mut JavascriptParser,
+    expr: &MemberExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserCallMemberChain,
+  call_member_chain(
+    parser: &mut JavascriptParser,
+    expr: &CallExpr,
+    for_name: &str,
+    members: &[Atom],
+    members_optionals: &[bool],
+    member_ranges: &[Span]
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserImportCall,
+  import_call(
+    parser: &mut JavascriptParser,
+    node: &CallExpr,
+    import_then: Option<&CallExpr>,
+    referenced_in_members: Option<(&[Atom], bool)>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ImportParserPlugin,
+  JavascriptParserFinish,
+  finish(parser: &mut JavascriptParser) -> bool
+);
+
+impl JavascriptParserPlugin for ImportParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .can_collect_destructuring_assignment_properties
+      .tap(self.clone());
+    context.hooks.pre_declarator.tap(self.clone());
+    context
+      .hooks
+      .identifier
+      .r#for(DYNAMIC_IMPORT_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .member_chain
+      .r#for(DYNAMIC_IMPORT_TAG)
+      .tap(self.clone());
+    context
+      .hooks
+      .call_member_chain
+      .r#for(DYNAMIC_IMPORT_TAG)
+      .tap(self.clone());
+    context.hooks.import_call.tap(self.clone());
+    context.hooks.finish.tap(self);
   }
 }
 

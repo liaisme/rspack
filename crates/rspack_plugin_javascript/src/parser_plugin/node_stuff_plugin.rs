@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{
   CachedConstDependency, ConstDependency, ImportMeta, NodeDirnameOption, NodeFilenameOption,
   NodeGlobalOption, RuntimeGlobals, RuntimeRequirementsDependency, get_context, parse_resource,
@@ -9,7 +11,10 @@ use swc_core::{common::Spanned, ecma::ast::Expr};
 use url::Url;
 
 use crate::{
-  JavascriptParserPlugin,
+  JavascriptParserEvaluateIdentifier, JavascriptParserEvaluateTypeof, JavascriptParserIdentifier,
+  JavascriptParserImportMetaPropertyInDestructuring, JavascriptParserMember,
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserRename,
+  JavascriptParserTypeof,
   dependency::ExternalModuleDependency,
   utils::eval,
   visitors::{DestructuringAssignmentProperty, JavascriptParser},
@@ -396,8 +401,7 @@ impl NodeStuffPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for NodeStuffPlugin {
+impl NodeStuffPlugin {
   fn identifier(
     &self,
     parser: &mut JavascriptParser,
@@ -850,5 +854,102 @@ impl JavascriptParserPlugin for NodeStuffPlugin {
 
     let value = Self::get_import_meta_destructuring_value(parser, meta_property)?;
     Some(format!("{}: {value}", property.id))
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserRename,
+  rename(parser: &mut JavascriptParser, expr: &Expr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserTypeof,
+  r#typeof(
+    parser: &mut JavascriptParser,
+    unary_expr: &swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a swc_core::ecma::ast::UnaryExpr,
+    for_name: &str
+  ) -> eval::BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> crate::utils::eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    member_expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  NodeStuffPlugin,
+  JavascriptParserImportMetaPropertyInDestructuring,
+  import_meta_property_in_destructuring(
+    parser: &mut JavascriptParser,
+    property: &DestructuringAssignmentProperty
+  ) -> String
+);
+
+impl JavascriptParserPlugin for NodeStuffPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    if self.handle_cjs {
+      for key in [DIRNAME, FILENAME, GLOBAL] {
+        context.hooks.identifier.r#for(key).tap(self.clone());
+      }
+      context.hooks.rename.r#for(GLOBAL).tap(self.clone());
+      for key in [DIRNAME, FILENAME] {
+        context.hooks.r#typeof.r#for(key).tap(self.clone());
+        context
+          .hooks
+          .evaluate_identifier
+          .r#for(key)
+          .tap(self.clone());
+      }
+    }
+
+    if self.handle_esm {
+      for key in [IMPORT_META_DIRNAME, IMPORT_META_FILENAME] {
+        context.hooks.r#typeof.r#for(key).tap(self.clone());
+        context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+        context
+          .hooks
+          .evaluate_identifier
+          .r#for(key)
+          .tap(self.clone());
+        context.hooks.member.r#for(key).tap(self.clone());
+      }
+      context
+        .hooks
+        .import_meta_property_in_destructuring
+        .tap(self);
+    }
   }
 }

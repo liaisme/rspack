@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use itertools::Itertools;
 use rspack_core::{BoxDependency, ConstDependency, DependencyRange, DependencyType, ImportPhase};
 use rspack_util::SpanExt;
@@ -8,7 +10,9 @@ use swc_core::{
 
 use super::{
   DEFAULT_STAR_JS_WORD, InnerGraphMapUsage, InnerGraphPlugin, JS_DEFAULT_KEYWORD,
-  JavascriptParserPlugin,
+  JavascriptParserExport, JavascriptParserExportExpression, JavascriptParserExportImport,
+  JavascriptParserExportImportSpecifier, JavascriptParserExportSpecifier, JavascriptParserPlugin,
+  JavascriptParserPluginContext,
   esm_import_dependency_parser_plugin::{ESM_SPECIFIER_TAG, ESMSpecifierData},
   inline_const::{INLINABLE_CONST_TAG, InlinableConstData},
 };
@@ -28,8 +32,7 @@ use crate::{
 
 pub struct ESMExportDependencyParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ESMExportDependencyParserPlugin {
+impl ESMExportDependencyParserPlugin {
   fn export(&self, parser: &mut JavascriptParser, statement: ExportLocal) -> Option<bool> {
     let range = DependencyRange::from(statement.span());
     let loc = parser.to_dependency_location(range);
@@ -289,5 +292,58 @@ impl JavascriptParserPlugin for ESMExportDependencyParserPlugin {
       InnerGraphMapUsage::Value(JS_DEFAULT_KEYWORD.clone()),
     );
     Some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ESMExportDependencyParserPlugin,
+  JavascriptParserExport,
+  export(parser: &mut JavascriptParser, statement: ExportLocal) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMExportDependencyParserPlugin,
+  JavascriptParserExportImport,
+  export_import(parser: &mut JavascriptParser, statement: ExportImport, source: &Atom) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMExportDependencyParserPlugin,
+  JavascriptParserExportSpecifier,
+  export_specifier(
+    parser: &mut JavascriptParser,
+    statement: ExportLocal,
+    local_id: &Atom,
+    export_name: &Atom,
+    export_name_span: Span
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMExportDependencyParserPlugin,
+  JavascriptParserExportImportSpecifier,
+  export_import_specifier(
+    parser: &mut JavascriptParser,
+    statement: ExportImport,
+    source: &Atom,
+    local_id: Option<&Atom>,
+    export_name: Option<&Atom>,
+    export_name_span: Option<Span>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMExportDependencyParserPlugin,
+  JavascriptParserExportExpression,
+  export_expression(
+    parser: &mut JavascriptParser,
+    statement: ExportDefaultDeclaration,
+    expr: ExportDefaultExpression
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ESMExportDependencyParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.export.tap(self.clone());
+    context.hooks.export_import.tap(self.clone());
+    context.hooks.export_specifier.tap(self.clone());
+    context.hooks.export_import_specifier.tap(self.clone());
+    context.hooks.export_expression.tap(self);
   }
 }

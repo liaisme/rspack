@@ -9,7 +9,14 @@ use swc_core::{
   common::{Span, Spanned},
 };
 
-use super::{super::JavascriptParserPlugin, ProvideValue, VALUE_DEP_PREFIX};
+use super::{
+  super::{
+    JavascriptParserCall, JavascriptParserCanRename, JavascriptParserIdentifier,
+    JavascriptParserMember, JavascriptParserPlugin, JavascriptParserPluginContext,
+    JavascriptParserRename,
+  },
+  ProvideValue, VALUE_DEP_PREFIX,
+};
 use crate::{dependency::ProvideDependency, visitors::JavascriptParser};
 
 const SOURCE_DOT: &str = r#"."#;
@@ -61,8 +68,7 @@ impl ProvideParserPlugin {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ProvideParserPlugin {
+impl ProvideParserPlugin {
   fn can_rename(&self, _parser: &mut JavascriptParser, str: &str) -> Option<bool> {
     self.names.contains(str).then_some(true)
   }
@@ -101,5 +107,78 @@ impl JavascriptParserPlugin for ProvideParserPlugin {
     self
       .add_provide_dep(for_name, ident.span, parser)
       .then_some(true)
+  }
+
+  fn rename(
+    &self,
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::Expr,
+    for_name: &str,
+  ) -> Option<bool> {
+    self
+      .add_provide_dep(for_name, expr.span(), parser)
+      .then_some(false)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ProvideParserPlugin,
+  JavascriptParserCanRename,
+  can_rename(parser: &mut JavascriptParser, str: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ProvideParserPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ProvideParserPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ProvideParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(
+    parser: &mut JavascriptParser,
+    ident: &swc_core::ecma::ast::Ident,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ProvideParserPlugin,
+  JavascriptParserRename,
+  rename(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::Expr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ProvideParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    for key in self.names.iter() {
+      context
+        .hooks
+        .can_rename
+        .r#for(key.as_str())
+        .tap(self.clone());
+    }
+
+    for key in self.provide.keys() {
+      let key = key.as_str();
+      context.hooks.rename.r#for(key).tap(self.clone());
+      context.hooks.call.r#for(key).tap(self.clone());
+      context.hooks.member.r#for(key).tap(self.clone());
+      context.hooks.identifier.r#for(key).tap(self.clone());
+    }
   }
 }

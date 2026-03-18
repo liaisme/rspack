@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{ContextMode, ContextNameSpaceObject, ContextOptions, DependencyCategory};
 use rspack_regex::RspackRegex;
 use rspack_util::SpanExt;
@@ -6,7 +8,10 @@ use swc_core::{
   ecma::ast::{CallExpr, Lit},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserEvaluateIdentifier, JavascriptParserPlugin,
+  JavascriptParserPluginContext,
+};
 use crate::{
   dependency::ImportMetaContextDependency,
   utils::{
@@ -108,8 +113,7 @@ fn create_import_meta_context_dependency(
 
 pub struct ImportMetaContextDependencyParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ImportMetaContextDependencyParserPlugin {
+impl ImportMetaContextDependencyParserPlugin {
   fn evaluate_identifier(
     &self,
     _parser: &mut JavascriptParser,
@@ -144,5 +148,40 @@ impl JavascriptParserPlugin for ImportMetaContextDependencyParserPlugin {
     } else {
       None
     }
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ImportMetaContextDependencyParserPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  ImportMetaContextDependencyParserPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ImportMetaContextDependencyParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(expr_name::IMPORT_META_CONTEXT)
+      .tap(self.clone());
+    context
+      .hooks
+      .call
+      .r#for(expr_name::IMPORT_META_CONTEXT)
+      .tap(self);
   }
 }

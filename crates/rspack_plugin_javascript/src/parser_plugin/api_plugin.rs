@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rspack_core::{ConstDependency, ModuleArgument, RuntimeGlobals, RuntimeRequirementsDependency};
 use rspack_error::{Error, Severity};
 use rspack_util::SpanExt;
@@ -8,7 +10,11 @@ use swc_core::{
 
 use crate::{
   dependency::{ModuleArgumentDependency, RequireMainDependency},
-  parser_plugin::JavascriptParserPlugin,
+  parser_plugin::{
+    JavascriptParserCall, JavascriptParserEvaluateIdentifier, JavascriptParserEvaluateTypeof,
+    JavascriptParserIdentifier, JavascriptParserMember, JavascriptParserPlugin,
+    JavascriptParserPluginContext, JavascriptParserPreDeclarator, JavascriptParserPreStatement,
+  },
   utils::eval::{self, BasicEvaluatedExpression},
   visitors::{JavascriptParser, Statement, VariableDeclaration, create_traceable_error},
 };
@@ -95,8 +101,7 @@ fn get_typeof_evaluate_of_api(sym: &str) -> Option<&str> {
   }
 }
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for APIPlugin {
+impl APIPlugin {
   fn evaluate_typeof<'a>(
     &self,
     parser: &mut JavascriptParser,
@@ -404,5 +409,143 @@ impl JavascriptParserPlugin for APIPlugin {
     }
 
     None
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserEvaluateIdentifier,
+  evaluate_identifier(
+    parser: &mut JavascriptParser,
+    for_name: &str,
+    start: u32,
+    end: u32
+  ) -> eval::BasicEvaluatedExpression<'static>
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserMember,
+  member(
+    parser: &mut JavascriptParser,
+    member_expr: &swc_core::ecma::ast::MemberExpr,
+    for_name: &str
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserPreDeclarator,
+  pre_declarator(
+    parser: &mut JavascriptParser,
+    declarator: &swc_core::ecma::ast::VarDeclarator,
+    declaration: VariableDeclaration<'_>
+  ) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserPreStatement,
+  pre_statement(parser: &mut JavascriptParser, stmt: Statement) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  APIPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for APIPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.pre_declarator.tap(self.clone());
+    context.hooks.pre_statement.tap(self.clone());
+
+    for key in [
+      API_REQUIRE,
+      API_HASH,
+      API_LAYER,
+      API_PUBLIC_PATH,
+      API_MODULES,
+      API_MODULE,
+      API_CHUNK_LOAD,
+      API_BASE_URI,
+      API_SYSTEM_CONTEXT,
+      API_SHARE_SCOPES,
+      API_INIT_SHARING,
+      API_NONCE,
+      API_CHUNK_NAME,
+      API_GET_SCRIPT_FILENAME,
+      API_VERSION,
+      API_UNIQUE_ID,
+      API_RSC_MANIFEST,
+    ] {
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+    }
+
+    for key in [
+      API_REQUIRE,
+      API_HASH,
+      API_LAYER,
+      API_PUBLIC_PATH,
+      API_MODULES,
+      API_MODULE,
+      API_CHUNK_LOAD,
+      API_BASE_URI,
+      API_NON_REQUIRE,
+      API_SYSTEM_CONTEXT,
+      API_SHARE_SCOPES,
+      API_INIT_SHARING,
+      API_NONCE,
+      API_CHUNK_NAME,
+      API_RUNTIME_ID,
+      API_GET_SCRIPT_FILENAME,
+      API_VERSION,
+      API_UNIQUE_ID,
+      API_RSC_MANIFEST,
+    ] {
+      context.hooks.identifier.r#for(key).tap(self.clone());
+    }
+
+    context
+      .hooks
+      .evaluate_identifier
+      .r#for(API_LAYER)
+      .tap(self.clone());
+
+    for key in [
+      "require.extensions",
+      "require.config",
+      "require.version",
+      "require.include",
+      "require.onError",
+      "require.main.require",
+      "module.parent.require",
+      "require.cache",
+      "require.main",
+      "__webpack_module__.id",
+    ] {
+      context.hooks.member.r#for(key).tap(self.clone());
+    }
+
+    for key in [
+      "require.config",
+      "require.include",
+      "require.onError",
+      "require.main.require",
+      "module.parent.require",
+    ] {
+      context.hooks.call.r#for(key).tap(self.clone());
+    }
   }
 }

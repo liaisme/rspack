@@ -12,7 +12,6 @@ pub mod utils;
 pub mod visitors;
 pub use parser_plugin::*;
 use rspack_core::rspack_sources::SourceMap;
-pub use rspack_macros::implemented_javascript_parser_hooks;
 
 pub use crate::plugin::{infer_async_modules_plugin::InferAsyncModulesPlugin, *};
 

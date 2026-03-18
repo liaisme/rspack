@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use rspack_core::ConstDependency;
-use rspack_plugin_javascript::{JavascriptParserPlugin, visitors::JavascriptParser};
+use rspack_plugin_javascript::{
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserProgram,
+  visitors::JavascriptParser,
+};
 use swc_core::ecma::ast::{Expr, Lit, ModuleItem, Program, Stmt};
 
 pub struct ReactDirectivesParserPlugin;
@@ -26,8 +31,7 @@ impl ReactDirectivesParserPlugin {
   }
 }
 
-#[rspack_plugin_javascript::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ReactDirectivesParserPlugin {
+impl ReactDirectivesParserPlugin {
   fn program(&self, parser: &mut JavascriptParser, ast: &Program) -> Option<bool> {
     let mut directives = Vec::new();
 
@@ -61,5 +65,26 @@ impl JavascriptParserPlugin for ReactDirectivesParserPlugin {
     }
 
     None
+  }
+}
+
+struct ReactDirectivesParserPluginProgramTap(Arc<ReactDirectivesParserPlugin>);
+
+impl JavascriptParserProgram for ReactDirectivesParserPluginProgramTap {
+  fn run(
+    &self,
+    parser: &mut JavascriptParser,
+    ast: &Program,
+  ) -> rspack_error::Result<Option<bool>> {
+    Ok(self.0.program(parser, ast))
+  }
+}
+
+impl JavascriptParserPlugin for ReactDirectivesParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context
+      .hooks
+      .program
+      .tap(ReactDirectivesParserPluginProgramTap(self));
   }
 }

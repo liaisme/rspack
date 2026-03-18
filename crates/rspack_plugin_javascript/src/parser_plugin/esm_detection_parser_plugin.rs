@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::{ops::Add, sync::Arc};
 
 use rspack_core::{BuildMetaExportsType, ExportsArgument, ModuleArgument, ModuleType};
 use rspack_util::SpanExt;
@@ -7,7 +7,12 @@ use swc_core::{
   ecma::ast::{Ident, ModuleItem, Program, UnaryExpr},
 };
 
-use super::JavascriptParserPlugin;
+use super::{
+  JavascriptParserCall, JavascriptParserEvaluateTypeof, JavascriptParserIdentifier,
+  JavascriptParserPlugin, JavascriptParserPluginContext, JavascriptParserProgram,
+  JavascriptParserTopLevelAwaitExpr, JavascriptParserTopLevelForOfAwaitStmt,
+  JavascriptParserTypeof,
+};
 use crate::{
   dependency::ESMCompatibilityDependency,
   utils::eval::BasicEvaluatedExpression,
@@ -48,8 +53,7 @@ fn is_non_esm_identifier(name: &str) -> bool {
 }
 
 // Port from https://github.com/webpack/webpack/blob/main/lib/dependencies/HarmonyDetectionParserPlugin.js
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for ESMDetectionParserPlugin {
+impl ESMDetectionParserPlugin {
   fn program(&self, parser: &mut JavascriptParser, ast: &Program) -> Option<bool> {
     let is_strict_esm = matches!(parser.module_type, ModuleType::JsEsm);
     let is_esm = is_strict_esm
@@ -129,6 +133,68 @@ impl JavascriptParserPlugin for ESMDetectionParserPlugin {
     for_name: &str,
   ) -> Option<bool> {
     (parser.is_esm && is_non_esm_identifier(for_name)).then_some(true)
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserProgram,
+  program(parser: &mut JavascriptParser, ast: &Program) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserTopLevelAwaitExpr,
+  top_level_await_expr(parser: &mut JavascriptParser, expr: &swc_core::ecma::ast::AwaitExpr)
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserTopLevelForOfAwaitStmt,
+  top_level_for_of_await_stmt(
+    parser: &mut JavascriptParser,
+    stmt: &swc_core::ecma::ast::ForOfStmt
+  )
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserEvaluateTypeof,
+  <'a>,
+  evaluate_typeof(
+    parser: &mut JavascriptParser,
+    expr: &'a UnaryExpr,
+    for_name: &str
+  ) -> BasicEvaluatedExpression<'a>
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserTypeof,
+  r#typeof(parser: &mut JavascriptParser, expr: &UnaryExpr, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserIdentifier,
+  identifier(parser: &mut JavascriptParser, ident: &Ident, for_name: &str) -> bool
+);
+crate::impl_javascript_parser_hook!(
+  ESMDetectionParserPlugin,
+  JavascriptParserCall,
+  call(
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::CallExpr,
+    for_name: &str
+  ) -> bool
+);
+
+impl JavascriptParserPlugin for ESMDetectionParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.program.tap(self.clone());
+    context.hooks.top_level_await_expr.tap(self.clone());
+    context.hooks.top_level_for_of_await_stmt.tap(self.clone());
+    for key in ["exports", "define"] {
+      context.hooks.evaluate_typeof.r#for(key).tap(self.clone());
+      context.hooks.r#typeof.r#for(key).tap(self.clone());
+      context.hooks.identifier.r#for(key).tap(self.clone());
+      context.hooks.call.r#for(key).tap(self.clone());
+    }
   }
 }
 

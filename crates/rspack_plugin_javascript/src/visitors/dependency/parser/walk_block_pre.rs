@@ -12,7 +12,6 @@ use super::{
 };
 use crate::{
   JS_DEFAULT_KEYWORD,
-  parser_plugin::JavascriptParserPlugin,
   visitors::{VariableDeclaration, VariableDeclarationKind},
 };
 

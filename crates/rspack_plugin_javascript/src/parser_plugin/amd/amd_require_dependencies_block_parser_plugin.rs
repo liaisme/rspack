@@ -1,4 +1,4 @@
-use std::{borrow::Cow, iter};
+use std::{borrow::Cow, iter, sync::Arc};
 
 use either::Either;
 use itertools::Itertools;
@@ -15,7 +15,7 @@ use swc_core::{
 };
 
 use crate::{
-  JavascriptParserPlugin,
+  JavascriptParserCall, JavascriptParserPlugin, JavascriptParserPluginContext,
   dependency::{
     AMDRequireContextDependency,
     amd_require_array_dependency::{AMDRequireArrayDependency, AMDRequireArrayItem},
@@ -40,8 +40,7 @@ fn is_reserved_param(pat: &Pat) -> bool {
 
 pub struct AMDRequireDependenciesBlockParserPlugin;
 
-#[rspack_macros::implemented_javascript_parser_hooks]
-impl JavascriptParserPlugin for AMDRequireDependenciesBlockParserPlugin {
+impl AMDRequireDependenciesBlockParserPlugin {
   fn call(
     &self,
     parser: &mut JavascriptParser,
@@ -53,6 +52,18 @@ impl JavascriptParserPlugin for AMDRequireDependenciesBlockParserPlugin {
     } else {
       None
     }
+  }
+}
+
+crate::impl_javascript_parser_hook!(
+  AMDRequireDependenciesBlockParserPlugin,
+  JavascriptParserCall,
+  call(parser: &mut JavascriptParser, call_expr: &CallExpr, for_name: &str) -> bool
+);
+
+impl JavascriptParserPlugin for AMDRequireDependenciesBlockParserPlugin {
+  fn apply(self: Arc<Self>, context: &mut JavascriptParserPluginContext<'_>) {
+    context.hooks.call.r#for("require").tap(self);
   }
 }
 
