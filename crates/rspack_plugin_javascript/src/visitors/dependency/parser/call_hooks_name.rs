@@ -21,7 +21,7 @@ impl CallHooksName for Atom {
   where
     F: Fn(&mut JavascriptParser, &str) -> Option<T>,
   {
-    if let Some(id) = parser.get_variable_info(self).map(|info| info.id()) {
+    if let Some(id) = parser.get_variable_info_id(self) {
       // resolved variable info
       call_hooks_info(id, parser, hook_call)
     } else {
@@ -116,14 +116,23 @@ fn call_hooks_info<F, T>(
 where
   F: Fn(&mut JavascriptParser, &str) -> Option<T>,
 {
-  let info = parser.definitions_db.expect_get_variable(id);
-  let mut next_tag_info = info.tag_info;
+  let (mut next_tag_info, fallback_name) = {
+    let info = parser.definitions_db.expect_get_variable(id);
+    let fallback_name = if info.is_free() || info.is_tagged() {
+      info.name.clone()
+    } else {
+      None
+    };
+    (info.tag_info, fallback_name)
+  };
 
   while let Some(tag_info_id) = next_tag_info {
     parser.current_tag_info = Some(tag_info_id);
-    let tag_info = parser.definitions_db.expect_get_tag_info(tag_info_id);
-    let next = tag_info.next;
-    let result = hook_call(parser, tag_info.tag);
+    let (tag, next) = {
+      let tag_info = parser.definitions_db.expect_get_tag_info(tag_info_id);
+      (tag_info.tag, tag_info.next)
+    };
+    let result = hook_call(parser, tag);
     parser.current_tag_info = None;
     if result.is_some() {
       return result;
@@ -131,11 +140,8 @@ where
     next_tag_info = next;
   }
 
-  let info = parser.definitions_db.expect_get_variable(id);
-  if let Some(name) = &info.name
-    && (info.is_free() || info.is_tagged())
-  {
-    let result = hook_call(parser, &name.clone());
+  if let Some(name) = fallback_name {
+    let result = hook_call(parser, name.as_ref());
     if result.is_some() {
       return result;
     }

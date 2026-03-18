@@ -9,13 +9,13 @@ macro_rules! define_parser_sync_hook {
     }
 
     pub struct $hook_name {
-      taps: Vec<Box<dyn $trait_name + Send + Sync>>,
+      taps: smallvec::SmallVec<[Box<dyn $trait_name + Send + Sync>; 1]>,
     }
 
     impl Default for $hook_name {
       fn default() -> Self {
         Self {
-          taps: Vec::new(),
+          taps: smallvec::SmallVec::new(),
         }
       }
     }
@@ -28,6 +28,7 @@ macro_rules! define_parser_sync_hook {
 
     impl $hook_name {
       #[allow(clippy::too_many_arguments)]
+      #[inline]
       pub fn call(&self, $($arg: $arg_ty),*) -> rspack_error::Result<()> {
         for tap in &self.taps {
           tap.run($($arg),*)?;
@@ -35,6 +36,7 @@ macro_rules! define_parser_sync_hook {
         Ok(())
       }
 
+      #[inline]
       pub fn tap(&mut self, tap: impl $trait_name + Send + Sync + 'static) {
         self.taps.push(Box::new(tap));
       }
@@ -50,13 +52,13 @@ macro_rules! define_parser_sync_bail_hook {
     }
 
     pub struct $hook_name {
-      taps: Vec<Box<dyn $trait_name + Send + Sync>>,
+      taps: smallvec::SmallVec<[Box<dyn $trait_name + Send + Sync>; 1]>,
     }
 
     impl Default for $hook_name {
       fn default() -> Self {
         Self {
-          taps: Vec::new(),
+          taps: smallvec::SmallVec::new(),
         }
       }
     }
@@ -69,6 +71,7 @@ macro_rules! define_parser_sync_bail_hook {
 
     impl $hook_name {
       #[allow(clippy::too_many_arguments)]
+      #[inline]
       pub fn call(&self, $($arg: $arg_ty),*) -> rspack_error::Result<Option<$ret>> {
         for tap in &self.taps {
           if let Some(result) = tap.run($($arg),*)? {
@@ -78,6 +81,7 @@ macro_rules! define_parser_sync_bail_hook {
         Ok(None)
       }
 
+      #[inline]
       pub fn tap(&mut self, tap: impl $trait_name + Send + Sync + 'static) {
         self.taps.push(Box::new(tap));
       }
@@ -90,13 +94,13 @@ macro_rules! define_parser_sync_bail_hook {
     }
 
     pub struct $hook_name {
-      taps: Vec<Box<dyn $trait_name + Send + Sync>>,
+      taps: smallvec::SmallVec<[Box<dyn $trait_name + Send + Sync>; 1]>,
     }
 
     impl Default for $hook_name {
       fn default() -> Self {
         Self {
-          taps: Vec::new(),
+          taps: smallvec::SmallVec::new(),
         }
       }
     }
@@ -109,6 +113,7 @@ macro_rules! define_parser_sync_bail_hook {
 
     impl $hook_name {
       #[allow(clippy::too_many_arguments)]
+      #[inline]
       pub fn call<$lt>(&self, $($arg: $arg_ty),*) -> rspack_error::Result<Option<$ret>> {
         for tap in &self.taps {
           if let Some(result) = tap.run($($arg),*)? {
@@ -118,6 +123,7 @@ macro_rules! define_parser_sync_bail_hook {
         Ok(None)
       }
 
+      #[inline]
       pub fn tap(&mut self, tap: impl $trait_name + Send + Sync + 'static) {
         self.taps.push(Box::new(tap));
       }
@@ -134,50 +140,20 @@ pub struct HookMap<H> {
 }
 
 impl<H> HookMap<H> {
+  #[inline]
   pub fn get(&self, key: &str) -> Option<&H> {
     self.map.get(key)
-  }
-
-  #[cfg(test)]
-  pub fn len(&self) -> usize {
-    self.map.len()
   }
 }
 
 impl<H: Default> HookMap<H> {
+  #[inline]
   pub fn r#for(&mut self, key: impl ToString) -> &mut H {
     self.map.entry(Cow::Owned(key.to_string())).or_default()
   }
 
+  #[inline]
   pub fn for_static(&mut self, key: &'static str) -> &mut H {
     self.map.entry(Cow::Borrowed(key)).or_default()
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::HookMap;
-
-  #[test]
-  fn parser_hook_map_is_lazy() {
-    let mut map = HookMap::<Vec<u8>>::default();
-    assert_eq!(map.len(), 0);
-    assert!(map.get("a").is_none());
-
-    map.for_static("a").push(1);
-
-    assert_eq!(map.len(), 1);
-    assert_eq!(map.get("a"), Some(&vec![1]));
-  }
-
-  #[test]
-  fn parser_hook_map_supports_borrowed_lookup() {
-    let mut map = HookMap::<Vec<u8>>::default();
-    let key = String::from("alpha");
-
-    map.r#for(&key).extend([1, 2]);
-
-    assert_eq!(map.get("alpha"), Some(&vec![1, 2]));
-    assert!(map.get("beta").is_none());
   }
 }

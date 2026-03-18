@@ -1,6 +1,9 @@
+use std::sync::{Arc, LazyLock};
+
 use rspack_core::{
   CompilerOptions, JavascriptParserOptions, ModuleLayer, ModuleType, ResourceData,
 };
+use rspack_util::fx_hash::FxDashMap;
 use swc_core::{
   atoms::Atom,
   common::Span,
@@ -314,6 +317,7 @@ impl std::fmt::Debug for JavascriptParserEvaluateCallExpressionMemberHook {
 }
 
 impl JavascriptParserEvaluateCallExpressionMemberHook {
+  #[inline]
   pub fn call<'a>(
     &self,
     parser: &mut JavascriptParser,
@@ -330,6 +334,7 @@ impl JavascriptParserEvaluateCallExpressionMemberHook {
     Ok(None)
   }
 
+  #[inline]
   pub fn tap(
     &mut self,
     tap: impl JavascriptParserEvaluateCallExpressionMember + Send + Sync + 'static,
@@ -340,6 +345,7 @@ impl JavascriptParserEvaluateCallExpressionMemberHook {
 
 macro_rules! call_sync {
   ($field:ident($($arg:ident: $ty:ty),* $(,)?)) => {
+    #[inline]
     pub fn $field(&self, $($arg: $ty),*) {
       self
         .$field
@@ -351,6 +357,7 @@ macro_rules! call_sync {
 
 macro_rules! call_sync_bail {
   ($field:ident($($arg:ident: $ty:ty),* $(,)?) -> $ret:ty) => {
+    #[inline]
     pub fn $field(&self, $($arg: $ty),*) -> Option<$ret> {
       self
         .$field
@@ -363,15 +370,12 @@ macro_rules! call_sync_bail {
 macro_rules! call_sync_bail_map {
   ($field:ident($($arg:ident: $ty:ty),* $(,)?), $for_name:ident -> $ret:ty) => {
     #[allow(clippy::too_many_arguments)]
+    #[inline]
     pub fn $field(&self, $($arg: $ty),*) -> Option<$ret> {
-      self
-        .$field
-        .get($for_name)
-        .and_then(|hook| {
-          hook
-            .call($($arg),*)
-            .expect(concat!(stringify!($field), " parser hook should not fail"))
-        })
+      let hook = self.$field.get($for_name)?;
+      hook
+        .call($($arg),*)
+        .expect(concat!(stringify!($field), " parser hook should not fail"))
     }
   };
 }
@@ -437,6 +441,7 @@ pub struct JavascriptParserHooks {
 }
 
 impl JavascriptParserHooks {
+  #[inline]
   pub fn new(
     plugins: Vec<BoxJavascriptParserPlugin>,
     compiler_options: &CompilerOptions,
