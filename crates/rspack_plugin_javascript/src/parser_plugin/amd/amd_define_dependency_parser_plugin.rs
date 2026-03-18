@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use rspack_core::{
   BoxDependencyTemplate, BuildMetaDefaultObject, BuildMetaExportsType, ContextDependency,
@@ -644,4 +644,3 @@ mod tests {
     assert_eq!(lookup("ui/foo", "bar"), "bar");
   }
 }
-use std::sync::Arc;

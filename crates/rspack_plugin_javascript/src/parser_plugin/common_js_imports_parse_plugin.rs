@@ -884,6 +884,7 @@ impl CommonJsImportsParserPlugin {
     }
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn member_chain_of_call_member_chain(
     &self,
     parser: &mut JavascriptParser,
@@ -904,6 +905,7 @@ impl CommonJsImportsParserPlugin {
     None
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn call_member_chain_of_call_member_chain(
     &self,
     parser: &mut JavascriptParser,
