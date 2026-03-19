@@ -10,7 +10,7 @@ use std::{
 };
 
 use tokio::{
-  task::{JoinHandle, futures::TaskLocalFuture},
+  task::{AbortHandle, JoinHandle, JoinSet, futures::TaskLocalFuture},
   task_local,
 };
 
@@ -114,4 +114,17 @@ where
   let compiler_context = CURRENT_COMPILER_CONTEXT.get();
 
   tokio::spawn(CURRENT_COMPILER_CONTEXT.scope(compiler_context, future))
+}
+
+pub fn spawn_in_compiler_context_on_join_set<F>(
+  join_set: &mut JoinSet<F::Output>,
+  future: F,
+) -> AbortHandle
+where
+  F: Future + Send + 'static,
+  F::Output: Send + 'static,
+{
+  let compiler_context = CURRENT_COMPILER_CONTEXT.get();
+
+  join_set.spawn(CURRENT_COMPILER_CONTEXT.scope(compiler_context, future))
 }

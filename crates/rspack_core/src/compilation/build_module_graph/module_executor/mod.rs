@@ -8,12 +8,9 @@ mod overwrite;
 use rspack_collections::{Identifier, IdentifierDashMap, IdentifierDashSet};
 use rspack_error::Result;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use tokio::{
-  sync::{
-    mpsc::{UnboundedSender, unbounded_channel},
-    oneshot,
-  },
-  task,
+use tokio::sync::{
+  mpsc::{UnboundedSender, unbounded_channel},
+  oneshot,
 };
 
 pub use self::execute::{ExecuteModuleId, ExecutedRuntimeModule};
@@ -92,14 +89,14 @@ impl ModuleExecutor {
     let (stop_sender, stop_receiver) = oneshot::channel();
     self.event_sender = Some(event_sender);
     self.stop_receiver = Some(stop_receiver);
-    // avoid coop budget consumed to zero cause hang risk
-    // related to https://tokio.rs/blog/2020-04-preemption
-    rspack_tasks::spawn_in_compiler_context(task::unconstrained(async move {
+    // TaskLoop injects explicit cooperative yield points, so the driver can
+    // stay within Tokio's budget without bypassing scheduler fairness.
+    rspack_tasks::spawn_in_compiler_context(async move {
       let _ = run_task_loop(&mut ctx, vec![Box::new(CtrlTask { event_receiver })]).await;
 
       // ignore error, stop_receiver may be dropped if make stage occur error.
       let _ = stop_sender.send(ctx);
-    }));
+    });
 
     Ok(())
   }
