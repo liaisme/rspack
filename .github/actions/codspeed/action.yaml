@@ -117,4 +117,8 @@ runs:
 
         # Run the benchmarks
         # Enable fair sched to make benchmark more stable, see: https://github.com/CodSpeedHQ/runner/pull/91
-        env VALGRIND_FLAGS='--fair-sched=yes' codspeed run $RUNNER_ARGS -- '${{ inputs.run }}'
+        CODSPEED_BIN="$(command -v codspeed || true)"
+        if [ -z "$CODSPEED_BIN" ]; then
+          CODSPEED_BIN="$HOME/.cargo/bin/codspeed"
+        fi
+        sudo -E env HOME="$HOME" VALGRIND_FLAGS='--fair-sched=yes' "$CODSPEED_BIN" run $RUNNER_ARGS -- '${{ inputs.run }}'
