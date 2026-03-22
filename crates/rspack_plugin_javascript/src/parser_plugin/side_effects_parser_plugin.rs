@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use rspack_core::{
   DeferredPureCheck, Dependency, DependencyRange, ModuleDependency, SideEffectsBailoutItemWithSpan,
 };
@@ -45,9 +43,7 @@ struct PureAnnotation<'a> {
 }
 
 fn has_no_side_effects_notation(comments: Option<&dyn Comments>, span: Span) -> bool {
-  comments
-    .map(|comments| comments.has_flag(span.lo, "NO_SIDE_EFFECTS"))
-    .unwrap_or(false)
+  comments.is_some_and(|comments| comments.has_flag(span.lo, "NO_SIDE_EFFECTS"))
 }
 
 impl<'a> Visit for PureAnnotation<'a> {
@@ -299,9 +295,7 @@ fn is_pure_call_expr(
   };
 
   let callee = &call_expr.callee;
-  let pure_flag = comments
-    .map(|comments| comments.has_flag(callee.span().lo, "PURE"))
-    .unwrap_or(false);
+  let pure_flag = comments.is_some_and(|comments| comments.has_flag(callee.span().lo, "PURE"));
 
   if pure_flag {
     return call_expr.args.iter().all(|arg| {
@@ -325,8 +319,7 @@ fn is_pure_call_expr(
       .build_info
       .side_effects_free
       .as_ref()
-      .map(|side_effects_free| side_effects_free.contains(&ident.sym))
-      .unwrap_or(false)
+      .is_some_and(|side_effects_free| side_effects_free.contains(&ident.sym))
     {
       return true;
     }
