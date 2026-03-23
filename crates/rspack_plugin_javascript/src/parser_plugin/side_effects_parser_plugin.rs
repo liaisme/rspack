@@ -288,7 +288,7 @@ fn is_pure_call_expr(
   expr: &Expr,
   unresolved_ctxt: SyntaxContext,
   comments: Option<&dyn Comments>,
-  mut callees: Option<&mut Vec<(Atom, Span)>>,
+  callees: Option<&mut Vec<(Atom, Span)>>,
 ) -> bool {
   let Expr::Call(call_expr) = expr else {
     unreachable!();
@@ -298,20 +298,14 @@ fn is_pure_call_expr(
   let pure_flag = comments.is_some_and(|comments| comments.has_flag(callee.span().lo, "PURE"));
 
   if pure_flag {
-    return call_expr.args.iter().all(|arg| {
-      if arg.spread.is_some() {
-        false
-      } else {
-        is_pure_expression(
-          parser,
-          analyze_side_effects_free,
-          &arg.expr,
-          unresolved_ctxt,
-          comments,
-          callees.as_deref_mut(),
-        )
-      }
-    });
+    return is_pure_call_args(
+      parser,
+      analyze_side_effects_free,
+      call_expr,
+      unresolved_ctxt,
+      comments,
+      callees,
+    );
   } else if analyze_side_effects_free
     && let Some(Expr::Ident(ident)) = callee.as_expr().map(|expr| expr.as_ref())
   {
@@ -321,32 +315,26 @@ fn is_pure_call_expr(
       .as_ref()
       .is_some_and(|side_effects_free| side_effects_free.contains(&ident.sym))
     {
-      return true;
+      return is_pure_call_args(
+        parser,
+        analyze_side_effects_free,
+        call_expr,
+        unresolved_ctxt,
+        comments,
+        callees,
+      );
     }
 
     if let Some(callees) = callees {
       callees.push((ident.sym.clone(), callee.span()));
-
-      for arg in &call_expr.args {
-        if arg.spread.is_some() {
-          return false;
-        }
-        if !is_pure_expression(
-          parser,
-          analyze_side_effects_free,
-          &arg.expr,
-          unresolved_ctxt,
-          comments,
-          // We CAN pass callees here now because we are in a loop (conceptually),
-          // but we need to reborrow.
-          // Helper:
-          Some(callees),
-        ) {
-          return false;
-        }
-      }
-
-      return true;
+      return is_pure_call_args(
+        parser,
+        analyze_side_effects_free,
+        call_expr,
+        unresolved_ctxt,
+        comments,
+        Some(callees),
+      );
     }
   }
 
@@ -356,6 +344,32 @@ fn is_pure_call_expr(
     is_unresolved_ref_safe: false,
     remaining_depth: 4,
   })
+}
+
+fn is_pure_call_args(
+  parser: &mut JavascriptParser,
+  analyze_side_effects_free: bool,
+  call_expr: &swc_core::ecma::ast::CallExpr,
+  unresolved_ctxt: SyntaxContext,
+  comments: Option<&dyn Comments>,
+  mut callees: Option<&mut Vec<(Atom, Span)>>,
+) -> bool {
+  for arg in &call_expr.args {
+    if arg.spread.is_some() {
+      return false;
+    }
+    if !is_pure_expression(
+      parser,
+      analyze_side_effects_free,
+      &arg.expr,
+      unresolved_ctxt,
+      comments,
+      callees.as_deref_mut(),
+    ) {
+      return false;
+    }
+  }
+  true
 }
 
 fn try_extract_deferred_check(
