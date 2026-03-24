@@ -1,0 +1,58 @@
+name: Build Rspack for Termux
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: web-infra-dev/rspack
+          ref: v1.7.10
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Add Android Target
+        run: rustup target add aarch64-linux-android
+
+      - name: Setup Android NDK
+        run: |
+          NDK=$ANDROID_NDK_LATEST_HOME
+          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
+          echo "CC_aarch64_linux_android=$TOOLCHAIN/aarch64-linux-android26-clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$TOOLCHAIN/aarch64-linux-android26-clang" >> $GITHUB_ENV
+
+      - name: Install Dependencies
+        run: |
+          npm install -g @napi-rs/cli
+          pnpm install --no-frozen-lockfile
+
+      - name: Build Rspack Node Binding
+        run: |
+          cd crates/node_binding
+          npx napi build --release --target aarch64-linux-android --strip
+
+      - name: Rename Artifact
+        run: |
+          cd crates/node_binding
+          find . -name "*.node" -exec mv {} ../../rspack.android-arm64-v8a.node \;
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rspack.android-arm64-v8a
+          path: rspack.android-arm64-v8a.node
